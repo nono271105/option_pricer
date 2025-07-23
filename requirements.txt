@@ -34,3 +34,4 @@ tzdata
 urllib3
 websockets
 yfinance
+dotenv
