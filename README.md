@@ -5,7 +5,7 @@ Une application Python pour l'évaluation d'options financières utilisant le mo
 
 ## Fonctionnalités
 
-- Calcul du prix des options selon le modèle Black-Scholes
+- Calcul du prix des options selon le modèle Black-Scholes (incluant les dividendes)
 - Calcul des Grecs (Delta, Gamma, Theta, Vega, Rho)
 - Récupération des données financières en temps réel via Yahoo Finance
 - Visualisation des payoffs d'options
