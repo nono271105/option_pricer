@@ -10,7 +10,7 @@ import numpy as np
 class DataFetcher:
     def __init__(self):
         # Clé API pour FRED (Secured Overnight Financing Rate)
-        self.fred_api_key = "bb51351aa8fdf3c9a74c80716aba0a8e"
+        self.fred_api_key = os.getenv("FRED_API_KEY")
 
     def get_live_price(self, ticker_symbol):
         try:
