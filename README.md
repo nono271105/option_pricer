@@ -1,6 +1,10 @@
-# Option Pricer
+<h1 align="center">
+  <img src="https://github.com/user-attachments/assets/8145acf4-0b8c-47e1-afa7-fd7d1b56da96" alt="logo" width="100" style="vertical-align: middle; margin-right: 1px;">
+  Option Pricer
+</h1>
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 Une application Python pour l'évaluation d'options financières utilisant le modèle Black-Scholes.
 
@@ -80,6 +84,9 @@ python main.py
    - "Cliquez sur une Grec" dans le tableau pour voir son graphique
    - "Tracer le Payoff" : Visualise le profit/perte à l'échéance
 
+<img width="1440" height="900" alt="Capture d’écran 2025-09-12 à 18 17 51" src="https://github.com/user-attachments/assets/20fde54a-db92-4b7b-bba4-ff1e965341ca" />
+
+
 ### Onglet "Simulation Call Price"
 
 1. **Paramètres automatiques** :
@@ -92,6 +99,9 @@ python main.py
    - Ajustez les pas de simulation si nécessaire
    - Lancez la simulation pour voir l'impact croisé
    - Les couleurs vont du vert (prix bas) au rouge (prix élevé)
+
+<img width="1440" height="900" alt="Capture d’écran 2025-09-12 à 18 18 19" src="https://github.com/user-attachments/assets/a051a226-a205-4ab1-81e5-472ac2dae8d6" />
+
 
 ## Structure du Projet
 
