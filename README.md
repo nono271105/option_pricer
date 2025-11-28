@@ -19,7 +19,7 @@ Une application Python pour l'évaluation d'options financières utilisant le mo
 - **Prix en direct** via Yahoo Finance
 - **Taux SOFR** (Secured Overnight Financing Rate) via l'API FRED pour le taux sans risque
 - **Rendement de dividende** automatiquement récupéré
-- **Volatilité historique** calculée sur 1 an (252 jours de trading)
+- **Volatilité implicite** calculée grâce à une chaîne d'options
 
 ### Visualisation et Analyse
 - **Payoffs d'options** avec breakeven automatiquement calculé
