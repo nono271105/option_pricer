@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QFormLayout, QGroupBox, QGridLayout,
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit,
-    QTabWidget, QDialog # <-- Ajout de QDialog pour les fenêtres de graphiques
+    QTabWidget, QDialog 
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
@@ -13,7 +13,7 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import date
+from datetime import date, datetime
 
 from data_fetcher import DataFetcher
 from option_models import OptionModels
@@ -124,7 +124,7 @@ class OptionPricingApp(QWidget):
         current_data_layout.addRow("Prix Actuel (S):", self.live_price_label)
         current_data_layout.addRow("Taux Sans Risque SOFR (r):", self.risk_free_rate_label)
         current_data_layout.addRow("Rendement Dividende (q):", self.dividend_yield_label)
-        current_data_layout.addRow("Volatilité Historique (52w) (σ):", self.historical_vol_label)
+        current_data_layout.addRow("Volatilité Utilisée (σ):", self.historical_vol_label) # Mise à jour du libellé
         current_data_layout.addRow("Prix de l'option:", self.bs_price_label)
         current_data_group.setLayout(current_data_layout)
         display_panel_layout.addWidget(current_data_group)
@@ -206,7 +206,7 @@ class OptionPricingApp(QWidget):
             QMessageBox.warning(self, "Taux SOFR Manquant",
                                  "Impossible de récupérer le taux SOFR. Le calcul des options utilisera un taux par défaut (1%).")
             # Utiliser une valeur par défaut raisonnable si le SOFR n'est pas disponible
-            self.r = 0.01 # 1% par défaut si SOFR non récupérable
+            self.r = 0.04 # 4% par défaut si SOFR non récupérable
 
         dividend_yield_for_calculation = self.data_fetcher.get_dividend_yield(ticker_symbol)
         
@@ -227,7 +227,8 @@ class OptionPricingApp(QWidget):
 
         historical_vol = self.data_fetcher.get_historical_volatility(ticker_symbol, period="1y")
         if historical_vol is not None:
-            self.historical_vol_label.setText(f"{historical_vol*100:.2f}%")
+            # L'affichage de la volatilité historique est conservé pour information
+            self.historical_vol_label.setText(f"Historique: {historical_vol*100:.2f}%")
             self.historical_vol = historical_vol
         else:
             self.historical_vol_label.setText("Erreur / N/A")
@@ -236,59 +237,101 @@ class OptionPricingApp(QWidget):
                                  f"Impossible de calculer la volatilité historique pour {ticker_symbol}. "
                                  "Les calculs du prix BSM et des Grecs utiliseront une volatilité par défaut (20%).")
         
+        # On passe la vol historique à la simulation tab initialement, elle sera mise à jour dans calculate_option_metrics
         self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.historical_vol)
 
     def calculate_option_metrics(self):
-        # Sauvegarde des paramètres courants pour les graphiques de Grecs
         try:
+            # Récupération des inputs de l'interface
             self.K = float(self.strike_input.text())
-            self.option_type = self.option_type_combo.currentText()
+            self.option_type = self.option_type_combo.currentText() # 'call' ou 'put'
 
-            today = date.today()
+            # Conversion de la date de l'interface en objet datetime pour yfinance
             maturity_qdate = self.maturity_date_input.date()
-            maturity_date = date(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day())
-            time_difference = maturity_date - today
-            self.T = time_difference.days / 365.0 # T en années
-
-            if self.S is None or self.r is None or self.q is None or self.K is None or self.T is None or self.option_type is None:
-                QMessageBox.warning(self, "Données Manquantes", "Veuillez d'abord récupérer toutes les données de l'actif sous-jacent et définir les paramètres de l'option.")
-                return
-
-            if self.T <= 0:
-                QMessageBox.warning(self, "Erreur de Maturité", "La date d'échéance doit être dans le futur.")
+            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day()) 
+            
+            # --- Vérifications préalables ---
+            if self.S is None or self.r is None or self.q is None or self.current_ticker is None:
+                QMessageBox.warning(self, "Données Manquantes", "Veuillez d'abord récupérer toutes les données de l'actif sous-jacent (S, r, q).")
                 return
             if self.K <= 0:
                 QMessageBox.warning(self, "Erreur de Strike", "Le prix d'exercice doit être supérieur à 0.")
                 return
-
-            sigma = self.historical_vol if self.historical_vol is not None and self.historical_vol > 0 else 0.20
-            if self.historical_vol is None or self.historical_vol <= 0:
-                 QMessageBox.information(self, "Volatilité",
-                                         f"La volatilité historique n'est pas disponible ou est nulle. "
-                                         f"Utilisation d'une volatilité par défaut ({sigma*100:.0f}%) pour les calculs.")
-            self.current_sigma = sigma # Stocker sigma pour les tracés de Grecs
-
-            bs_price = self.option_models.black_scholes_price(
-                self.S, self.K, self.T, self.r, self.current_sigma, self.q, self.option_type
+            
+            # Appel de la nouvelle fonction qui retourne l'IV, le Prix Marché et la date réelle
+            fetched_iv, market_price, closest_date = self.data_fetcher.get_implied_volatility_and_price(
+                self.current_ticker, self.K, maturity_datetime, self.option_type 
             )
-            self.bs_price_label.setText(f"{bs_price:.4f}")
+            
+            # Mise à jour du temps jusqu'à l'échéance (T) en utilisant la date d'expiration réelle
+            if closest_date:
+                # La date d'expiration réelle (closest_date) est un string 'YYYY-MM-DD'
+                closest_date_obj = datetime.strptime(closest_date, '%Y-%m-%d').date()
+                today = date.today()
+                time_difference = closest_date_obj - today
+                self.T = time_difference.days / 365.0
+                if self.T < 0: 
+                    self.T = 1e-6 # Petite valeur positive si date est passée
+                    QMessageBox.information(self, "Avertissement Date", "La date d'expiration la plus proche est déjà passée. Le temps à l'échéance (T) est forcé à une valeur minimale.")
+            else:
+                # Fallback sur la date de l'utilisateur si la chaîne d'options n'a pas pu être récupérée
+                today = date.today()
+                time_difference = maturity_datetime.date() - today
+                self.T = time_difference.days / 365.0
+                if self.T <= 0:
+                    QMessageBox.warning(self, "Erreur de Maturité", "La date d'échéance doit être dans le futur.")
+                    return
 
+            # --- Logique de choix de la Volatilité (IV vs Historique) ---
+            if fetched_iv is not None and fetched_iv > 0.001 and market_price is not None:
+                # Utilisation de l'IV du marché
+                sigma = fetched_iv
+                pricing_method = "IV Marché"
+                bs_price = market_price # Le prix BSM est le prix marché si on utilise l'IV
+                
+            else:
+                # Fallback sur la volatilité historique (ou par défaut 20%)
+                sigma = self.historical_vol if self.historical_vol is not None and self.historical_vol > 0 else 0.20
+                pricing_method = "Vol Historique (Fallback)"
+                market_price = None 
+                
+                # Calcul du prix Black-Scholes avec le fallback sigma
+                bs_price = self.option_models.black_scholes_price(self.S, self.K, self.T, self.r, sigma, self.q, self.option_type)
+                
+                if self.historical_vol is None or self.historical_vol <= 0 or fetched_iv is None:
+                     QMessageBox.information(self, "Volatilité",
+                                         f"L'IV du marché n'est pas disponible. "
+                                         f"Utilisation d'une volatilité ({sigma*100:.2f}%) pour les calculs.")
+
+            self.current_sigma = sigma # Stocker la sigma utilisée pour les tracés de Grecs
+            
+            # --- Mise à jour de l'affichage ---
+            
+            self.historical_vol_label.setText(f"Volatilité Utilisée ({pricing_method}): {self.current_sigma*100:.2f}%")
+            self.bs_price_label.setText(f"{bs_price:.4f} $")
+
+            # Calcul des Grecs (en utilisant la sigma choisie)
             greeks = self.option_models.calculate_greeks(
                 self.S, self.K, self.T, self.r, self.current_sigma, self.q, self.option_type
             )
 
+            # Mise à jour de la table des Grecs
             self.greeks_table.setItem(0, 0, QTableWidgetItem(f"{greeks.get('delta', 0):.4f}"))
             self.greeks_table.setItem(0, 1, QTableWidgetItem(f"{greeks.get('gamma', 0):.4f}"))
             self.greeks_table.setItem(0, 2, QTableWidgetItem(f"{greeks.get('theta', 0):.4f}"))
-            self.greeks_table.setItem(0, 3, QTableWidgetItem(f"{greeks.get('vega', 0)/100:.4f}")) # Vega est souvent reporté pour un changement de 1% (100 bps)
+            self.greeks_table.setItem(0, 3, QTableWidgetItem(f"{greeks.get('vega', 0)/100:.4f}")) 
             self.greeks_table.setItem(0, 4, QTableWidgetItem(f"{greeks.get('rho', 0):.4f}"))
+
+            # Mettre à jour les données pour l'onglet de simulation
+            self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.current_sigma)
+
 
         except ValueError:
             QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques valides pour K.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Calcul", f"Une erreur inattendue est survenue: {e}")
 
-    # --- NOUVELLE MÉTHODE : Gérer le clic sur un Grec ---
+    #Gérer le clic sur un Grec
     def handle_greek_click(self, row, column):
         """
         Gère les clics sur les cellules de la table des Grecs et affiche un graphique.
@@ -298,7 +341,7 @@ class OptionPricingApp(QWidget):
             greek_name = greek_names[column]
             self.plot_greek_evolution(greek_name)
     
-    # --- NOUVELLE MÉTHODE : Tracer l'évolution d'un Grec ---
+    #Tracer l'évolution d'un Grec
     def plot_greek_evolution(self, greek_name):
         """
         Calcule et trace l'évolution d'un Grec donné en fonction du prix du sous-jacent.
@@ -365,7 +408,8 @@ class OptionPricingApp(QWidget):
                                     "Le payoff utilisera ce prix comme prime.")
                 return
 
-            premium = float(bs_price_str)
+            # On retire le '$' pour la conversion en float
+            premium = float(bs_price_str.replace('$', '').strip())
 
             if premium <= 0 and position == 'long':
                  QMessageBox.information(self, "Premium Nul/Négatif",
@@ -382,11 +426,15 @@ class OptionPricingApp(QWidget):
                 if position == "long":
                     breakeven = K + premium
                 elif position == "short":
+                    # Pour un short call, le breakeven est le strike + prime, 
+                    # mais le profit est limité à premium si le prix de l'actif reste sous K.
+                    # On affiche le point où la perte commence (au-dessus de K+premium, le profit devient négatif).
                     breakeven = K + premium 
             elif option_type == "put":
                 if position == "long":
                     breakeven = K - premium
                 elif position == "short":
+                    # Pour un short put, le breakeven est le strike - prime.
                     breakeven = K - premium 
             
             self.fig.clear()
@@ -397,7 +445,7 @@ class OptionPricingApp(QWidget):
             )
 
             # --- Mise à jour du titre du graphique avec le Breakeven ---
-            title_text = f"Payoff de l'Option {position.capitalize()} {option_type.capitalize()} (K={K:.2f}, Premium={premium:.2f})"
+            title_text = f"Payoff de l'Option {position.capitalize()} {option_type.capitalize()} (K={K:.2f}, Premium={premium:.4f})"
             if breakeven is not None:
                 title_text += f"\nBreakeven = {breakeven:.2f}"
             
@@ -414,7 +462,8 @@ class OptionPricingApp(QWidget):
         if index == self.tab_widget.indexOf(self.simulation_tab):
             # Utilisez les attributs de la classe si les données sont déjà chargées
             if self.current_ticker is not None and self.S is not None and self.r is not None and self.q is not None and self.historical_vol is not None:
-                self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.historical_vol)
+                # La simulation tab est mise à jour avec le self.current_sigma qui est l'IV ou le fallback
+                self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.current_sigma) 
             else:
                 QMessageBox.information(self, "Données Manquantes",
                                         "Veuillez récupérer les données financières (Ticker, Prix Actuel, Taux Sans Risque, Dividende, Volatilité) dans l'onglet 'Calculateur d'Option' d'abord.")
