@@ -233,18 +233,4 @@ Distribué sous la licence MIT. Voir `LICENSE` pour plus d'informations.
 
 ---
 
-## Support & Questions
-
-- 📧 Pour les problèmes : Ouvrez une issue GitHub
-- 💡 Suggestions : N'hésitez pas à proposer des améliorations
-- 📚 Documentation : Voir les docstrings dans le code
-
-## Remerciements
-
-- **Yahoo Finance** pour les données de marché en temps réel
-- **FRED API** pour les taux sans risque
-- **Communauté Python** pour les excellentes librairies (scipy, matplotlib, PyQt5)
-
----
-
-**Dernière mise à jour** : Novembre 2025
+**Dernière mise à jour** : 30 Novembre 2025
