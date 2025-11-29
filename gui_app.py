@@ -20,6 +20,7 @@ from data_fetcher import DataFetcher
 from option_models import OptionModels
 from strategy_manager import StrategyManager
 from simulation_tab import CallPriceSimulationTab
+from volatility_smile_tab import VolatilitySmileTab
 
 # ----------------------------------------------------------------------
 # Classe de dialogue pour les graphiques (existante)
@@ -168,58 +169,6 @@ class CRRModelTab(QWidget):
         else:
              self.vol_label.setText("N/A")
             
-
-# ----------------------------------------------------------------------
-# Classe pour l'onglet Sourire de Volatilité
-# ----------------------------------------------------------------------
-class VolatilitySmileTab(QWidget):
-    """
-    Onglet pour tracer le Sourire de Volatilité.
-    """
-    def __init__(self, app_instance):
-        super().__init__()
-        self.app = app_instance
-        self.init_ui()
-
-    def init_ui(self):
-        main_layout = QVBoxLayout(self)
-
-        # --- Panneau de contrôle ---
-        control_group = QGroupBox("Paramètres de la Chaîne d'Options")
-        control_layout = QHBoxLayout()
-
-        control_layout.addWidget(QLabel("Ticker Symbole:"))
-        self.ticker_input = QLineEdit("AAPL")
-        self.ticker_input.setPlaceholderText("Ex: AAPL")
-        control_layout.addWidget(self.ticker_input)
-
-        control_layout.addWidget(QLabel("Date d'échéance:"))
-        self.maturity_date_input = QDateEdit(QDate.currentDate().addMonths(1))
-        self.maturity_date_input.setCalendarPopup(True)
-        self.maturity_date_input.setDisplayFormat("dd/MM/yyyy")
-        control_layout.addWidget(self.maturity_date_input)
-
-        self.plot_button = QPushButton("Afficher le Sourire de Volatilité")
-        self.plot_button.clicked.connect(self.app.plot_volatility_smile)
-        control_layout.addWidget(self.plot_button)
-        
-        control_layout.addStretch(1)
-        control_group.setLayout(control_layout)
-        main_layout.addWidget(control_group)
-
-        # --- Panneau d'affichage du graphique ---
-        plot_group = QGroupBox("Sourire de Volatilité (IV vs Strike)")
-        plot_layout = QVBoxLayout()
-
-        self.fig = Figure(figsize=(10, 7))
-        self.canvas = FigureCanvas(self.fig)
-        plot_layout.addWidget(self.canvas)
-        
-        plot_group.setLayout(plot_layout)
-        main_layout.addWidget(plot_group)
-
-        main_layout.setStretchFactor(plot_group, 1)
-
 # ----------------------------------------------------------------------
 # Classe principale (OptionPricingApp) - Mise à jour de l'UI et Logique
 # ----------------------------------------------------------------------
@@ -346,25 +295,25 @@ class OptionPricingApp(QWidget):
         option_calculator_layout.addLayout(display_panel_layout, 2)
 
         # Ajout des onglets dans l'ordre: BSM, CRR, Simulation, Smile
-        self.tab_widget.addTab(option_calculator_widget, "1. Calculateur d'Option (BSM)")
+        self.tab_widget.addTab(option_calculator_widget, "Modèle BSM (Européen)")
 
         # ----------------------------------
         # 2. Modèle CRR (American)
         # ----------------------------------
         self.crr_tab = CRRModelTab(self)
-        self.tab_widget.addTab(self.crr_tab, "2. Modèle CRR (Américain)")
+        self.tab_widget.addTab(self.crr_tab, "Modèle CRR (Américain)")
 
         # ----------------------------------
         # 3. Simulation Call Price
         # ----------------------------------
         self.simulation_tab = CallPriceSimulationTab()
-        self.tab_widget.addTab(self.simulation_tab, "3. Simulation Call Price")
+        self.tab_widget.addTab(self.simulation_tab, "Simulation Call Price")
         
         # ----------------------------------
         # 4. Sourire de Volatilité
         # ----------------------------------
-        self.smile_tab = VolatilitySmileTab(self)
-        self.tab_widget.addTab(self.smile_tab, "4. Smile de Volatilité")
+        self.smile_tab = VolatilitySmileTab()
+        self.tab_widget.addTab(self.smile_tab, "Smile de Volatilité")
 
 
         main_window_layout = QVBoxLayout()
@@ -440,8 +389,11 @@ class OptionPricingApp(QWidget):
         self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, sigma_to_use)
         
         # 4. Onglet Smile (uniquement le Ticker)
+        self.smile_tab.update_financial_params(self.r, self.q)
+        self.smile_tab.update_S(self.S)
         if self.current_ticker and source_tab != self.smile_tab: # Évite de boucler si l'input vient du Smile
             self.smile_tab.ticker_input.setText(self.current_ticker)
+        
 
     # --- MÉTHODE EXISTANTE : Calcul BSM ---
     def calculate_option_metrics(self):
@@ -625,8 +577,11 @@ class OptionPricingApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}")
 
-    # Tracé du Sourire de Volatilité (Correction: Zoom et Logique)
+    # Smile de volatilité
     def plot_volatility_smile(self):
+        """
+        Trace une courbe continue (lissage Spline) du sourire de volatilité pour visualiser le Skew.
+        """
         try:
             ticker_symbol = self.smile_tab.ticker_input.text().strip().upper()
             maturity_qdate = self.smile_tab.maturity_date_input.date()
@@ -635,21 +590,43 @@ class OptionPricingApp(QWidget):
             if not ticker_symbol:
                 QMessageBox.warning(self, "Erreur", "Veuillez entrer un symbole de ticker.")
                 return
-            
+
             # Synchroniser les données financières (S)
             self.fetch_data_for_tab(ticker_symbol, self.smile_tab)
             
+            # Récupère le DataFrame complet des options (Calls + Puts)
             df_smile, closest_date = self.data_fetcher.get_volatility_smile_data(ticker_symbol, maturity_datetime)
 
             if df_smile is None or closest_date is None or df_smile.empty:
-                QMessageBox.warning(self, "Données Manquantes",
-                                     f"Impossible de récupérer la chaîne d'options pour {ticker_symbol} autour de {maturity_datetime.strftime('%Y-%m-%d')}. "
-                                     "Vérifiez le ticker et la disponibilité des options.")
+                QMessageBox.warning(self, "Données Manquantes", f"Impossible de récupérer la chaîne d'options pour {ticker_symbol} autour de {maturity_datetime.strftime('%Y-%m-%d')}.")
                 self.smile_tab.fig.clear()
                 self.smile_tab.canvas.draw()
                 return
+
+            current_price = self.S 
             
-            current_price = self.S # Utilise S synchronisé
+            # --- NETTOYAGE DES DONNÉES ---
+            # Vérification et suppression des NaN
+            df_smile.dropna(subset=['impliedVolatility', 'strike'], inplace=True)
+            # Filtre IV nulle
+            df_smile = df_smile[df_smile['impliedVolatility'] > 1e-6]
+            # Filtre Prix nuls (si lastPrice existe)
+            if 'lastPrice' in df_smile.columns: 
+                 df_smile = df_smile[df_smile['lastPrice'] >= 0.10]
+            
+            # Filtre Moneyness (± 40% autour du prix actuel pour avoir une courbe pertinente)
+            if current_price:
+                lower = current_price * 0.60 
+                upper = current_price * 1.40
+                df_smile = df_smile[(df_smile['strike'] >= lower) & (df_smile['strike'] <= upper)]
+
+            if df_smile.empty or len(df_smile) < 5:
+                QMessageBox.information(self, "Données insuffisantes", "Pas assez de points valides pour tracer une courbe lisse.")
+                self.smile_tab.fig.clear()
+                self.smile_tab.canvas.draw()
+                return
+
+            # --- PRÉPARATION DU LISSAGE (SPLINE) ---
             
             self.smile_tab.fig.clear()
             ax = self.smile_tab.fig.add_subplot(111)
@@ -657,51 +634,56 @@ class OptionPricingApp(QWidget):
             # Conversion IV en %
             df_smile['IV_percent'] = df_smile['impliedVolatility'] * 100
             
+            # TRI OBLIGATOIRE par Strike pour l'interpolation
+            df_smile = df_smile.sort_values(by='strike')
+            
+            X = df_smile['strike'].values
+            Y = df_smile['IV_percent'].values
+            
+            # Création de la courbe lisse (300 points interpolés)
+            # k=3 pour une spline cubique (courbe douce)
+            try:
+                X_smooth = np.linspace(X.min(), X.max(), 300)
+                spl = make_interp_spline(X, Y, k=3)
+                Y_smooth = spl(X_smooth)
+                
+                # Tracé de la LIGNE CONTINUE (C'est ce que vous voulez !)
+                ax.plot(X_smooth, Y_smooth, label='Sourire de Volatilité (Lissé)', color='blue', linewidth=2.5)
+            except Exception as e_spline:
+                print(f"Erreur Spline: {e_spline}. Fallback sur un tracé linéaire.")
+                ax.plot(X, Y, label='Sourire (Linéaire)', color='blue', linewidth=2)
+
+            # --- ÉLÉMENTS GRAPHIQUES SUPPLÉMENTAIRES ---
+
+            # Points bruts (discrets) en arrière-plan pour référence
             calls = df_smile[df_smile['type'] == 'call']
             puts = df_smile[df_smile['type'] == 'put']
+            ax.scatter(calls['strike'], calls['IV_percent'], label='Calls (Brut)', marker='o', s=15, alpha=0.4, color='green')
+            ax.scatter(puts['strike'], puts['IV_percent'], label='Puts (Brut)', marker='x', s=15, alpha=0.4, color='red')
 
-            ax.scatter(calls['strike'], calls['IV_percent'], label='Calls (IV)', marker='o', s=30)
-            ax.scatter(puts['strike'], puts['IV_percent'], label='Puts (IV)', marker='x', s=30)
-            
-            # Ligne de prix actuel (ATM)
+            # Ligne verticale ATM
             if current_price:
-                ax.axvline(current_price, color='r', linestyle='--', label=f'Prix Actuel (S): {current_price:.2f}')
-                
-                # Correction 3: Zoom par défaut autour de S (ne doit pas couper le graphique)
-                min_strike = df_smile['strike'].min()
-                max_strike = df_smile['strike'].max()
-                
-                # Détermine les limites du graphique pour le zoom
-                lower_limit = max(min_strike, current_price * 0.8)
-                upper_limit = min(max_strike, current_price * 1.2)
-                
-                # Assure un minimum d'écart pour éviter l'écrasement
-                if upper_limit - lower_limit < 10 and max_strike - min_strike > 10:
-                    center = current_price if current_price else (min_strike + max_strike) / 2
-                    lower_limit = max(min_strike, center - 5)
-                    upper_limit = min(max_strike, center + 5)
-                    
-                ax.set_xlim(lower_limit, upper_limit)
-                # Zoom vertical de l'IV (optionnel)
-                ax.set_ylim(df_smile['IV_percent'].min() * 0.9, df_smile['IV_percent'].max() * 1.1)
+                ax.axvline(current_price, color='red', linestyle='--', linewidth=1.5, label=f'Prix Actuel ({current_price:.2f})')
 
-                ax.set_ylim(0, 200)
-
-            # Mise en forme du graphique
-            ax.set_title(f"Sourire de Volatilité pour {ticker_symbol} (Échéance: {closest_date})")
-            ax.set_xlabel('Prix d\'Exercice (Strike K)')
-            ax.set_ylabel('Volatilité Implicite (IV) en %')
-            ax.grid(True, linestyle='--', alpha=0.7)
-            ax.legend()
-            self.smile_tab.canvas.draw()
+            # Titres et Labels
+            ax.set_title(f"Sourire de Volatilité : {ticker_symbol} (Échéance {closest_date})", fontsize=12, fontweight='bold')
+            ax.set_xlabel('Prix d\'Exercice (Strike)', fontsize=10)
+            ax.set_ylabel('Volatilité Implicite (%)', fontsize=10)
             
-            # Affichage de l'image de Volatility Smile comme référence pour l'utilisateur
-            # 
+            # Zoom intelligent sur l'axe Y (éviter les valeurs extrêmes > 150%)
+            y_max_visible = np.percentile(Y, 95) * 1.2 # Prend le 95ème percentile + 20% de marge
+            ax.set_ylim(0, min(y_max_visible, 200)) # Cap absolu à 200%
+
+            ax.grid(True, linestyle='--', alpha=0.6)
+            ax.legend(loc='upper center', bbox_to_anchor=(0.5, -0.15), ncol=3) # Légende en bas
+            
+            # Ajustement pour la légende
+            self.smile_tab.fig.subplots_adjust(bottom=0.2)
+            
+            self.smile_tab.canvas.draw()
 
         except Exception as e:
-            QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du sourire: {e}. Détails: {e.__class__.__name__}: {e}")
-            self.smile_tab.fig.clear()
-            self.smile_tab.canvas.draw()
+            QMessageBox.critical(self, "Erreur de Tracé", f"Erreur lors du tracé du sourire: {e}")
 
 
     # --- MÉTHODES EXISTANTES (handle_greek_click, plot_greek_evolution, plot_option_payoff) ---
