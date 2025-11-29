@@ -1,17 +1,14 @@
-import sys
-import yfinance as yf
 from PyQt5.QtWidgets import (
-    QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QFormLayout, QGroupBox, QGridLayout,
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit,
     QTabWidget, QDialog
 )
-from PyQt5.QtCore import Qt, QDate
+from PyQt5.QtCore import QDate
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
-import matplotlib.pyplot as plt
 import numpy as np
 from datetime import date, datetime 
 from scipy.interpolate import make_interp_spline
@@ -60,10 +57,9 @@ class CRRModelTab(QWidget):
         control_panel_group = QGroupBox("Paramètres de l'option (CRR)")
         control_form_layout = QFormLayout()
 
-        # Ticker (maintenant modifiable)
+        # Ticker (modifiable)
         self.ticker_input = QLineEdit()
         self.ticker_input.setPlaceholderText("Ex: AAPL")
-        # self.ticker_input.setDisabled(True) # Rendu modifiable
         control_form_layout.addRow("Ticker Symbole:", self.ticker_input)
 
         self.option_type_combo = QComboBox()
@@ -154,20 +150,17 @@ class CRRModelTab(QWidget):
 
     def update_financial_data(self, S, r, q, sigma_used, ticker, pricing_method=""):
         """Met à jour les labels d'information financière de l'onglet CRR."""
-        # Mise à jour du Ticker UNIQUEMENT si l'onglet principal change (pour synchronisation)
-        # Mais le champ reste modifiable
-        if self.ticker_input.text() == "" or self.app.tab_widget.currentIndex() != self.app.tab_widget.indexOf(self):
+        if self.ticker_input.text() == "":
             self.ticker_input.setText(ticker)
             
         self.live_price_label.setText(f"{S:.2f}" if S is not None else "N/A")
         self.risk_free_rate_label.setText(f"{r*100:.2f}%" if r is not None else "N/A")
         self.dividend_yield_label.setText(f"{q*100:.2f}%" if q is not None else "N/A")
         
-        # Correction 2: Afficher la méthode de Volatilité utilisée
         if sigma_used is not None:
-             self.vol_label.setText(f"{sigma_used*100:.2f}% ({pricing_method})")
+            self.vol_label.setText(f"{sigma_used*100:.2f}% ({pricing_method})")
         else:
-             self.vol_label.setText("N/A")
+            self.vol_label.setText("N/A")
             
 # ----------------------------------------------------------------------
 # Classe principale (OptionPricingApp) - Mise à jour de l'UI et Logique
@@ -329,7 +322,6 @@ class OptionPricingApp(QWidget):
     def fetch_data_for_tab(self, ticker_symbol, source_tab):
         """
         Récupère les données financières pour un ticker donné et met à jour tous les onglets.
-        source_tab peut être self (onglet BSM) ou self.crr_tab.
         """
         ticker_symbol = ticker_symbol.strip().upper()
         if not ticker_symbol:
@@ -339,7 +331,6 @@ class OptionPricingApp(QWidget):
             self.r = None
             self.q = None
             self.historical_vol = None
-            # Mettre à jour tous les onglets avec N/A
             self.update_all_tabs_financial_data()
             return
         
@@ -360,19 +351,14 @@ class OptionPricingApp(QWidget):
             QMessageBox.warning(self, "Données Manquantes",
                                  f"Impossible de récupérer le prix de {ticker_symbol}. Les calculs suivants pourraient être inexacts.")
             
-        # Si la source est BSM, met à jour le champ ticker (sinon il vient du CRR ou Smile)
         if source_tab == self:
             self.ticker_input.setText(self.current_ticker)
 
-        # Mise à jour de l'affichage dans tous les onglets
         self.update_all_tabs_financial_data(source_tab)
 
-    # --- NOUVELLE MÉTHODE : Mise à jour globale des données ---
     def update_all_tabs_financial_data(self, source_tab=None):
         """Met à jour les labels d'information financière dans tous les onglets."""
-        
-        # Le prix et la vol utilisée (sigma) ne sont définis qu'après un calculate_option_metrics
-        # On utilise une vol historique/par défaut tant qu'il n'y a pas eu de calcul BSM/IV.
+
         sigma_to_use = self.current_sigma if self.current_sigma is not None else (self.historical_vol or 0.20)
         pricing_method_to_use = self.pricing_method if self.pricing_method != "N/A" else "Vol Historique"
         
@@ -388,14 +374,13 @@ class OptionPricingApp(QWidget):
         # 3. Onglet Simulation
         self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, sigma_to_use)
         
-        # 4. Onglet Smile (uniquement le Ticker)
+        # 4. Onglet Smile
         self.smile_tab.update_financial_params(self.r, self.q)
         self.smile_tab.update_S(self.S)
-        if self.current_ticker and source_tab != self.smile_tab: # Évite de boucler si l'input vient du Smile
+        if self.current_ticker and source_tab != self.smile_tab:
             self.smile_tab.ticker_input.setText(self.current_ticker)
         
 
-    # --- MÉTHODE EXISTANTE : Calcul BSM ---
     def calculate_option_metrics(self):
         try:
             self.K = float(self.strike_input.text())
@@ -478,7 +463,6 @@ class OptionPricingApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Calcul", f"Une erreur inattendue est survenue: {e}")
 
-    # --- NOUVELLE MÉTHODE : Calcul CRR (Correction de l'affichage de la Vol) ---
     def calculate_crr_metrics(self):
         try:
             # Récupération des inputs depuis l'onglet CRR
@@ -535,7 +519,6 @@ class OptionPricingApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Calcul CRR", f"Une erreur inattendue est survenue: {e}")
 
-    # Tracé Payoff CRR 
     def plot_crr_payoff(self):
         try:
             K = float(self.crr_tab.strike_input.text())
@@ -577,10 +560,9 @@ class OptionPricingApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}")
 
-    # Smile de volatilité
     def plot_volatility_smile(self):
         """
-        Trace une courbe continue (lissage Spline) du sourire de volatilité pour visualiser le Skew.
+        Trace une courbe continue (lissage Spline) du sourire de volatilité.
         """
         try:
             ticker_symbol = self.smile_tab.ticker_input.text().strip().upper()
@@ -686,7 +668,6 @@ class OptionPricingApp(QWidget):
             QMessageBox.critical(self, "Erreur de Tracé", f"Erreur lors du tracé du sourire: {e}")
 
 
-    # --- MÉTHODES EXISTANTES (handle_greek_click, plot_greek_evolution, plot_option_payoff) ---
     def handle_greek_click(self, row, column):
         greek_names = ["Delta", "Gamma", "Theta", "Vega", "Rho"]
         if column < len(greek_names):
