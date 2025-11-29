@@ -19,9 +19,6 @@ from strategy_manager import StrategyManager
 from simulation_tab import CallPriceSimulationTab
 from volatility_smile_tab import VolatilitySmileTab
 
-# ----------------------------------------------------------------------
-# Classe de dialogue pour les graphiques (existante)
-# ----------------------------------------------------------------------
 class PlottingDialog(QDialog):
     """
     Une petite fenêtre de dialogue pour afficher les graphiques Matplotlib.
@@ -37,9 +34,6 @@ class PlottingDialog(QDialog):
         layout.addWidget(self.canvas)
 
 
-# ----------------------------------------------------------------------
-# Classe pour l'onglet Modèle CRR (Correction Ticker Input)
-# ----------------------------------------------------------------------
 class CRRModelTab(QWidget):
     """
     Onglet pour le calcul du prix et des Grecs des options Américaines (CRR).
@@ -86,7 +80,7 @@ class CRRModelTab(QWidget):
         
         # Le bouton d'appel doit appeler la nouvelle méthode fetch_data_for_tab
         self.fetch_data_button = QPushButton("Récupérer/Synchroniser les Données")
-        self.fetch_data_button.clicked.connect(lambda: self.app.fetch_data_for_tab(self.ticker_input.text(), self)) 
+        self.fetch_data_button.clicked.connect(lambda: self.app.fetch_data_for_tab(self.ticker_input.text(), self))
         control_form_layout.addRow(self.fetch_data_button)
 
         self.calculate_button = QPushButton("Calculer Prix et Grecs (CRR)")
@@ -112,13 +106,13 @@ class CRRModelTab(QWidget):
         self.live_price_label = QLabel("N/A")
         self.risk_free_rate_label = QLabel("N/A")
         self.dividend_yield_label = QLabel("N/A")
-        self.vol_label = QLabel("N/A") # Affichera aussi la méthode (IV/Hist)
+        self.vol_label = QLabel("N/A")
         self.crr_price_label = QLabel("N/A")
 
         current_data_layout.addRow("Prix Actuel (S):", self.live_price_label)
         current_data_layout.addRow("Taux Sans Risque SOFR (r):", self.risk_free_rate_label)
         current_data_layout.addRow("Rendement Dividende (q):", self.dividend_yield_label)
-        self.volatility_row = current_data_layout.addRow("Volatilité Utilisée (σ):", self.vol_label)
+        current_data_layout.addRow("Volatilité Utilisée (σ):", self.vol_label)
         current_data_layout.addRow("Prix de l'option (CRR):", self.crr_price_label)
         current_data_group.setLayout(current_data_layout)
         display_panel_layout.addWidget(current_data_group)
@@ -162,9 +156,6 @@ class CRRModelTab(QWidget):
         else:
             self.vol_label.setText("N/A")
             
-# ----------------------------------------------------------------------
-# Classe principale (OptionPricingApp) - Mise à jour de l'UI et Logique
-# ----------------------------------------------------------------------
 class OptionPricingApp(QWidget):
     def __init__(self):
         super().__init__()
@@ -180,21 +171,16 @@ class OptionPricingApp(QWidget):
         self.q = None
         self.historical_vol = None
         self.current_ticker = None
-        self.pricing_method = "N/A" # Nouvelle variable pour la méthode de pricing (IV ou Hist)
-        
-        self.K = None 
-        self.T = None 
-        self.option_type = None 
+        self.pricing_method = "N/A"
+        self.K = None
+        self.T = None
+        self.option_type = None
         self.current_sigma = None 
 
         self.init_ui()
 
     def init_ui(self):
         self.tab_widget = QTabWidget()
-
-        # ----------------------------------
-        # 1. Calculateur d'Option (BSM - European)
-        # ----------------------------------
         option_calculator_widget = QWidget()
         option_calculator_layout = QHBoxLayout(option_calculator_widget)
 
@@ -290,21 +276,12 @@ class OptionPricingApp(QWidget):
         # Ajout des onglets dans l'ordre: BSM, CRR, Simulation, Smile
         self.tab_widget.addTab(option_calculator_widget, "Modèle BSM (Européen)")
 
-        # ----------------------------------
-        # 2. Modèle CRR (American)
-        # ----------------------------------
         self.crr_tab = CRRModelTab(self)
         self.tab_widget.addTab(self.crr_tab, "Modèle CRR (Américain)")
 
-        # ----------------------------------
-        # 3. Simulation Call Price
-        # ----------------------------------
         self.simulation_tab = CallPriceSimulationTab()
         self.tab_widget.addTab(self.simulation_tab, "Simulation Call Price")
-        
-        # ----------------------------------
-        # 4. Sourire de Volatilité
-        # ----------------------------------
+
         self.smile_tab = VolatilitySmileTab()
         self.tab_widget.addTab(self.smile_tab, "Smile de Volatilité")
 
@@ -318,7 +295,6 @@ class OptionPricingApp(QWidget):
 
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
-    # --- NOUVELLE MÉTHODE : Fetch générique ---
     def fetch_data_for_tab(self, ticker_symbol, source_tab):
         """
         Récupère les données financières pour un ticker donné et met à jour tous les onglets.

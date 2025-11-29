@@ -67,18 +67,3 @@ class StrategyManager:
         ax.grid(True)
         ax.legend()
 
-# Test de la classe (peut être supprimé en production)
-if __name__ == "__main__":
-    manager = StrategyManager()
-
-    # Exemple d'achat de Call
-    K_call = 100
-    premium_call = 5
-    manager.plot_payoff(K_call, premium_call, 'call', 'long', "Payoff Achat Call")
-    plt.show()
-
-    # Exemple de vente de Put
-    K_put = 95
-    premium_put = 3
-    manager.plot_payoff(K_put, premium_put, 'put', 'short', "Payoff Vente Put")
-    plt.show()

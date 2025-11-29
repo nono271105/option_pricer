@@ -1,17 +1,16 @@
-# data_fetcher.py
 import yfinance as yf
-import os
 import requests
-from datetime import datetime, timedelta, date 
+from datetime import datetime, date
 from dotenv import load_dotenv
-load_dotenv()
-import numpy as np
+import os
 import pandas as pd
+import numpy as np
+
+load_dotenv()
 
 class DataFetcher:
     def __init__(self):
-        # Clé API pour FRED (Secured Overnight Financing Rate)
-        self.fred_api_key = "bb51351aa8fdf3c9a74c80716aba0a8e"
+        self.fred_api_key = os.getenv("FRED_API_KEY")
 
     def get_live_price(self, ticker_symbol):
         try:

@@ -15,7 +15,7 @@ class CallPriceSimulationTab(QWidget):
         super().__init__(parent)
         self.option_models = OptionModels()
 
-        self.ticker_symbol = "N/A" # Nouvelle variable pour stocker le ticker
+        self.ticker_symbol = "N/A"
         self.S_current = None
         self.r_current = None
         self.q_current = None
@@ -26,13 +26,11 @@ class CallPriceSimulationTab(QWidget):
     def init_ui(self):
         main_layout = QVBoxLayout()
 
-        # --- Group Box pour les paramètres de simulation ---
         params_group = QGroupBox("Paramètres de la simulation Call Price")
         params_layout = QFormLayout()
 
-        # Affichage du Ticker Symbole (read-only)
         self.ticker_display_label = QLabel("N/A")
-        params_layout.addRow("Ticker Symbole:", self.ticker_display_label) 
+        params_layout.addRow("Ticker Symbole:", self.ticker_display_label)
         self.S_display_label = QLabel("N/A")
         params_layout.addRow("Prix Actuel (S):", self.S_display_label)
 
@@ -76,7 +74,6 @@ class CallPriceSimulationTab(QWidget):
         params_group.setLayout(params_layout)
         main_layout.addWidget(params_group)
 
-        # --- Table de résultats ---
         results_group = QGroupBox("Résultats de la Simulation (Volatility(%) Vs Underlying Price)")
         results_layout = QVBoxLayout()
 
@@ -98,13 +95,11 @@ class CallPriceSimulationTab(QWidget):
         self.q_current = q
         self.historical_vol_current = historical_vol
 
-        # Mise à jour des labels
         self.ticker_display_label.setText(self.ticker_symbol if self.ticker_symbol else "N/A")
         self.S_display_label.setText(f"{self.S_current:.2f}" if self.S_current is not None else "N/A")
         self.update_simulation_ranges()
 
     def update_simulation_ranges(self):
-        # Pour la volatilité
         if self.historical_vol_current is not None and self.historical_vol_current > 0:
             vol_hist_percent = self.historical_vol_current * 100.0
             
@@ -120,7 +115,6 @@ class CallPriceSimulationTab(QWidget):
             self.vol_min_display.setText("N/A")
             self.vol_max_display.setText("N/A")
 
-        # Pour le prix sous-jacent
         if self.S_current is not None and self.S_current > 0:
             sim_underlying_min = int(round(self.S_current * 0.9))
             sim_underlying_max = int(round(self.S_current * 1.1))

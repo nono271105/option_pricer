@@ -2,9 +2,6 @@ import numpy as np
 from scipy.stats import norm
 
 class OptionModels:
-    def __init__(self):
-        pass
-
     def black_scholes_price(self, S, K, T, r, sigma, q, option_type='call'):
         """
         Calcule le prix d'une option européenne en utilisant le modèle Black-Scholes.
@@ -45,7 +42,6 @@ class OptionModels:
         d2 = d1 - sigma * np.sqrt(T)
         
         Nd1 = norm.cdf(d1)
-        # Nd2 = norm.cdf(d2) # non utilisé directement dans les formules de Grecs
         n_d1 = norm.pdf(d1)
 
         # Delta
@@ -87,7 +83,6 @@ class OptionModels:
             'rho': rho
         }
 
-    # --- NOUVEAU: Modèle Binomial CRR (Cox-Ross-Rubinstein) pour Options Américaines ---
     def cox_ross_rubinstein_price(self, S, K, T, r, q, sigma, N, option_type):
         """
         Calcule le prix d'une option Américaine en utilisant le modèle binomial CRR.
@@ -189,34 +184,3 @@ class OptionModels:
             'rho': rho
         }
 
-# Test de la classe (peut être supprimé en production)
-if __name__ == "__main__":
-    models = OptionModels()
-
-    # Paramètres de test
-    S_test = 100    # Prix de l'actif sous-jacent
-    K_test = 100    # Prix d'exercice
-    T_test = 0.5    # Temps jusqu'à l'échéance (0.5 an = 6 mois)
-    r_test = 0.05   # Taux sans risque (5%)
-    sigma_test = 0.20 # Volatilité (20%) - maintenant HISTORIQUE
-    q_test = 0.01   # Rendement du dividende (1%)
-    option_type_test = 'call'
-
-    # 1. Calcul du prix Black-Scholes avec volatilité historique
-    bs_price = models.black_scholes_price(S_test, K_test, T_test, r_test, sigma_test, q_test, option_type_test)
-    print(f"Prix Black-Scholes ({option_type_test}) avec volatilité historique: {bs_price:.4f}")
-
-    # 2. Calcul des Grecs
-    greeks = models.calculate_greeks(S_test, K_test, T_test, r_test, sigma_test, q_test, option_type_test)
-    print("\nGrecs:")
-    for greek_name, value in greeks.items():
-        print(f"  {greek_name.capitalize()}: {value:.4f}")
-
-    # Test avec une put
-    option_type_test_put = 'put'
-    bs_price_put = models.black_scholes_price(S_test, K_test, T_test, r_test, sigma_test, q_test, option_type_test_put)
-    print(f"\nPrix Black-Scholes ({option_type_test_put}) avec volatilité historique: {bs_price_put:.4f}")
-    greeks_put = models.calculate_greeks(S_test, K_test, T_test, r_test, sigma_test, q_test, option_type_test_put)
-    print("Grecs (Put):")
-    for greek_name, value in greeks_put.items():
-        print(f"  {greek_name.capitalize()}: {value:.4f}")
