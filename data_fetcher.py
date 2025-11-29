@@ -2,15 +2,16 @@
 import yfinance as yf
 import os
 import requests
-from datetime import datetime, timedelta, date
+from datetime import datetime, timedelta, date 
 from dotenv import load_dotenv
 load_dotenv()
 import numpy as np
+import pandas as pd
 
 class DataFetcher:
     def __init__(self):
         # Clé API pour FRED (Secured Overnight Financing Rate)
-        self.fred_api_key = os.getenv("FRED_API_KEY")
+        self.fred_api_key = "bb51351aa8fdf3c9a74c80716aba0a8e"
 
     def get_live_price(self, ticker_symbol):
         try:
@@ -32,10 +33,10 @@ class DataFetcher:
             
             # Calcul de la volatilité annuelle
             returns = hist['Close'].pct_change().dropna()
-            if len(returns) < 2: # Nécessite au moins 2 retours pour calculer un écart-type
+            if len(returns) < 2: 
                 return None
             
-            annual_volatility = returns.std() * np.sqrt(252) # 252 jours de trading par an
+            annual_volatility = returns.std() * np.sqrt(252)
             return annual_volatility
         except Exception as e:
             print(f"Erreur lors de la récupération de la volatilité historique pour {ticker_symbol}: {e}")
@@ -49,16 +50,13 @@ class DataFetcher:
         url = f"https://api.stlouisfed.org/fred/series/observations?series_id=SOFR&api_key={self.fred_api_key}&file_type=json"
         try:
             response = requests.get(url)
-            response.raise_for_status()  # Lève une exception pour les codes d'état HTTP d'erreur
+            response.raise_for_status() 
             data = response.json()
             
             observations = data.get('observations', [])
             if observations:
-                # Les observations sont généralement triées par date. Le dernier élément est le plus récent.
                 latest_observation = observations[-1]
                 sofr_value = float(latest_observation['value'])
-                # L'API renvoie le taux en pourcentage (ex: 5.33 pour 5.33%).
-                # Nous devons le convertir en décimal pour le modèle Black-Scholes.
                 return sofr_value / 100.0
             else:
                 print("Aucune observation SOFR trouvée dans la réponse de l'API.")
@@ -76,7 +74,6 @@ class DataFetcher:
     def get_dividend_yield(self, ticker_symbol):
         """
         Récupère le rendement de dividende annuel pour un ticker donné.
-        Utilise le rendement de dividende le plus récent du rapport YFinance.
         """
         try:
             ticker = yf.Ticker(ticker_symbol)
@@ -86,10 +83,10 @@ class DataFetcher:
             if dividend_yield is not None:
                 return float(dividend_yield) / 100.0 
             else:
-                return 0.0 # Si non disponible, retourne 0.0
+                return 0.0
         except Exception as e:
             print(f"Erreur lors de la récupération du rendement de dividende pour {ticker_symbol}: {e}")
-            return 0.0 # Retourne 0 si erreur ou non trouvé
+            return 0.0
 
     def get_option_data_chain(self, ticker_symbol, maturity_datetime):
         """
@@ -106,7 +103,6 @@ class DataFetcher:
                 return None, None
 
             # Trouver la date d'expiration disponible la plus proche
-            # On compare la date cible (maturity_datetime.date()) avec les dates d'expiration disponibles (converties en date)
             closest_date = min(expirations, 
                                key=lambda x: abs(datetime.strptime(x, '%Y-%m-%d').date() - maturity_datetime.date()))
             
@@ -126,7 +122,7 @@ class DataFetcher:
         opt_chain, closest_date = self.get_option_data_chain(ticker_symbol, maturity_datetime)
 
         if opt_chain is None or closest_date is None:
-            return None, None, None # IV, Prix, Date réelle
+            return None, None, None
 
         option_type = option_type.lower()
         
@@ -157,3 +153,37 @@ class DataFetcher:
             return None, None, closest_date
             
         return iv, price, closest_date
+
+    # Récupération des données pour le Sourire de Volatilité 
+    def get_volatility_smile_data(self, ticker_symbol, maturity_datetime):
+        """
+        Récupère les Strikes et Implied Volatility pour les Calls et Puts d'une expiration donnée.
+
+        Retourne:
+        DataFrame contenant ['strike', 'impliedVolatility', 'type'] pour Calls et Puts combinés,
+        et la date d'expiration réelle (string YYYY-MM-DD).
+        """
+        opt_chain, closest_date = self.get_option_data_chain(ticker_symbol, maturity_datetime)
+
+        if opt_chain is None or closest_date is None:
+            return None, None
+
+        # Nettoyage et combinaison des données Call et Put pour le tracé du sourire
+        calls_df = opt_chain.calls[['strike', 'impliedVolatility', 'lastPrice']].dropna()
+        puts_df = opt_chain.puts[['strike', 'impliedVolatility', 'lastPrice']].dropna()
+
+        # Filtrer les IVs non significatives ou nulles
+        calls_df = calls_df[calls_df['impliedVolatility'] > 1e-6]
+        puts_df = puts_df[puts_df['impliedVolatility'] > 1e-6]
+        
+        # Ajouter une colonne 'type' pour distinguer les points
+        calls_df['type'] = 'call'
+        puts_df['type'] = 'put'
+
+        # Correction de l'erreur 'append' en utilisant pd.concat
+        combined_df = pd.concat([
+            calls_df[['strike', 'impliedVolatility', 'type']],
+            puts_df[['strike', 'impliedVolatility', 'type']]
+        ]).drop_duplicates(subset=['strike', 'impliedVolatility']).reset_index(drop=True)
+        
+        return combined_df, closest_date
