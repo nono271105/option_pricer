@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QFormLayout, QGroupBox, QGridLayout,
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit,
-    QTabWidget, QDialog 
+    QTabWidget, QDialog
 )
 from PyQt5.QtCore import Qt, QDate
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
@@ -13,14 +13,17 @@ from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.figure import Figure
 import matplotlib.pyplot as plt
 import numpy as np
-from datetime import date, datetime
+from datetime import date, datetime 
+from scipy.interpolate import make_interp_spline
 
 from data_fetcher import DataFetcher
 from option_models import OptionModels
 from strategy_manager import StrategyManager
 from simulation_tab import CallPriceSimulationTab
 
-# Nouvelle classe pour la fenêtre de dialogue des graphiques
+# ----------------------------------------------------------------------
+# Classe de dialogue pour les graphiques (existante)
+# ----------------------------------------------------------------------
 class PlottingDialog(QDialog):
     """
     Une petite fenêtre de dialogue pour afficher les graphiques Matplotlib.
@@ -28,18 +31,203 @@ class PlottingDialog(QDialog):
     def __init__(self, parent=None, title="Graphique"):
         super().__init__(parent)
         self.setWindowTitle(title)
-        self.setGeometry(150, 150, 700, 500) # Taille par défaut
+        self.setGeometry(150, 150, 700, 500)
 
         layout = QVBoxLayout(self)
         self.fig = Figure(figsize=(7, 5))
         self.canvas = FigureCanvas(self.fig)
         layout.addWidget(self.canvas)
 
+
+# ----------------------------------------------------------------------
+# Classe pour l'onglet Modèle CRR (Correction Ticker Input)
+# ----------------------------------------------------------------------
+class CRRModelTab(QWidget):
+    """
+    Onglet pour le calcul du prix et des Grecs des options Américaines (CRR).
+    """
+    def __init__(self, app_instance):
+        super().__init__()
+        self.app = app_instance
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QHBoxLayout(self)
+
+        # --- Panneau de contrôle à gauche ---
+        control_panel_layout = QVBoxLayout()
+        control_panel_group = QGroupBox("Paramètres de l'option (CRR)")
+        control_form_layout = QFormLayout()
+
+        # Ticker (maintenant modifiable)
+        self.ticker_input = QLineEdit()
+        self.ticker_input.setPlaceholderText("Ex: AAPL")
+        # self.ticker_input.setDisabled(True) # Rendu modifiable
+        control_form_layout.addRow("Ticker Symbole:", self.ticker_input)
+
+        self.option_type_combo = QComboBox()
+        self.option_type_combo.addItems(["call", "put"])
+        control_form_layout.addRow("Type d'option:", self.option_type_combo)
+
+        self.strike_input = QLineEdit("150.00")
+        self.strike_input.setValidator(QDoubleValidator(0.0, 100000.0, 2))
+        control_form_layout.addRow("Prix d'exercice (K):", self.strike_input)
+
+        self.maturity_date_input = QDateEdit(QDate.currentDate().addMonths(3))
+        self.maturity_date_input.setCalendarPopup(True)
+        self.maturity_date_input.setDisplayFormat("dd/MM/yyyy")
+        control_form_layout.addRow("Date d'échéance:", self.maturity_date_input)
+
+        self.position_combo = QComboBox()
+        self.position_combo.addItems(["long", "short"])
+        control_form_layout.addRow("Position:", self.position_combo)
+        
+        # Nombre de Pas N
+        self.steps_input = QLineEdit("100")
+        self.steps_input.setValidator(QIntValidator(1, 10000))
+        control_form_layout.addRow("Nombre de pas (N):", self.steps_input)
+        
+        # Le bouton d'appel doit appeler la nouvelle méthode fetch_data_for_tab
+        self.fetch_data_button = QPushButton("Récupérer/Synchroniser les Données")
+        self.fetch_data_button.clicked.connect(lambda: self.app.fetch_data_for_tab(self.ticker_input.text(), self)) 
+        control_form_layout.addRow(self.fetch_data_button)
+
+        self.calculate_button = QPushButton("Calculer Prix et Grecs (CRR)")
+        self.calculate_button.clicked.connect(self.app.calculate_crr_metrics)
+        control_form_layout.addRow(self.calculate_button)
+
+        self.plot_payoff_button = QPushButton("Tracer le Payoff")
+        self.plot_payoff_button.clicked.connect(self.app.plot_crr_payoff)
+        control_form_layout.addRow(self.plot_payoff_button)
+
+        control_panel_group.setLayout(control_form_layout)
+        control_panel_layout.addWidget(control_panel_group)
+        control_panel_layout.addStretch(1)
+
+        main_layout.addLayout(control_panel_layout, 1)
+
+        # --- Panneau d'affichage à droite ---
+        display_panel_layout = QVBoxLayout()
+
+        current_data_group = QGroupBox("Données Actuelles")
+        current_data_layout = QFormLayout()
+        
+        self.live_price_label = QLabel("N/A")
+        self.risk_free_rate_label = QLabel("N/A")
+        self.dividend_yield_label = QLabel("N/A")
+        self.vol_label = QLabel("N/A") # Affichera aussi la méthode (IV/Hist)
+        self.crr_price_label = QLabel("N/A")
+
+        current_data_layout.addRow("Prix Actuel (S):", self.live_price_label)
+        current_data_layout.addRow("Taux Sans Risque SOFR (r):", self.risk_free_rate_label)
+        current_data_layout.addRow("Rendement Dividende (q):", self.dividend_yield_label)
+        self.volatility_row = current_data_layout.addRow("Volatilité Utilisée (σ):", self.vol_label)
+        current_data_layout.addRow("Prix de l'option (CRR):", self.crr_price_label)
+        current_data_group.setLayout(current_data_layout)
+        display_panel_layout.addWidget(current_data_group)
+
+        greeks_group = QGroupBox("Grecs (CRR)")
+        greeks_table_layout = QGridLayout()
+        self.greeks_table = QTableWidget(1, 5)
+        self.greeks_table.setHorizontalHeaderLabels(["Delta", "Gamma", "Theta (par jour)", "Vega", "Rho"])
+        self.greeks_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
+        self.greeks_table.setEditTriggers(QTableWidget.NoEditTriggers)
+
+        for col in range(5):
+            self.greeks_table.setItem(0, col, QTableWidgetItem("N/A"))
+
+        greeks_table_layout.addWidget(self.greeks_table, 0, 0)
+        greeks_group.setLayout(greeks_table_layout)
+        display_panel_layout.addWidget(greeks_group)
+
+        payoff_plot_group = QGroupBox("Payoff de l'option")
+        payoff_plot_layout = QVBoxLayout()
+
+        self.fig = Figure(figsize=(8, 6))
+        self.canvas = FigureCanvas(self.fig)
+        payoff_plot_layout.addWidget(self.canvas)
+        payoff_plot_group.setLayout(payoff_plot_layout)
+        display_panel_layout.addWidget(payoff_plot_group)
+
+        main_layout.addLayout(display_panel_layout, 2)
+
+    def update_financial_data(self, S, r, q, sigma_used, ticker, pricing_method=""):
+        """Met à jour les labels d'information financière de l'onglet CRR."""
+        # Mise à jour du Ticker UNIQUEMENT si l'onglet principal change (pour synchronisation)
+        # Mais le champ reste modifiable
+        if self.ticker_input.text() == "" or self.app.tab_widget.currentIndex() != self.app.tab_widget.indexOf(self):
+            self.ticker_input.setText(ticker)
+            
+        self.live_price_label.setText(f"{S:.2f}" if S is not None else "N/A")
+        self.risk_free_rate_label.setText(f"{r*100:.2f}%" if r is not None else "N/A")
+        self.dividend_yield_label.setText(f"{q*100:.2f}%" if q is not None else "N/A")
+        
+        # Correction 2: Afficher la méthode de Volatilité utilisée
+        if sigma_used is not None:
+             self.vol_label.setText(f"{sigma_used*100:.2f}% ({pricing_method})")
+        else:
+             self.vol_label.setText("N/A")
+            
+
+# ----------------------------------------------------------------------
+# Classe pour l'onglet Sourire de Volatilité
+# ----------------------------------------------------------------------
+class VolatilitySmileTab(QWidget):
+    """
+    Onglet pour tracer le Sourire de Volatilité.
+    """
+    def __init__(self, app_instance):
+        super().__init__()
+        self.app = app_instance
+        self.init_ui()
+
+    def init_ui(self):
+        main_layout = QVBoxLayout(self)
+
+        # --- Panneau de contrôle ---
+        control_group = QGroupBox("Paramètres de la Chaîne d'Options")
+        control_layout = QHBoxLayout()
+
+        control_layout.addWidget(QLabel("Ticker Symbole:"))
+        self.ticker_input = QLineEdit("AAPL")
+        self.ticker_input.setPlaceholderText("Ex: AAPL")
+        control_layout.addWidget(self.ticker_input)
+
+        control_layout.addWidget(QLabel("Date d'échéance:"))
+        self.maturity_date_input = QDateEdit(QDate.currentDate().addMonths(1))
+        self.maturity_date_input.setCalendarPopup(True)
+        self.maturity_date_input.setDisplayFormat("dd/MM/yyyy")
+        control_layout.addWidget(self.maturity_date_input)
+
+        self.plot_button = QPushButton("Afficher le Sourire de Volatilité")
+        self.plot_button.clicked.connect(self.app.plot_volatility_smile)
+        control_layout.addWidget(self.plot_button)
+        
+        control_layout.addStretch(1)
+        control_group.setLayout(control_layout)
+        main_layout.addWidget(control_group)
+
+        # --- Panneau d'affichage du graphique ---
+        plot_group = QGroupBox("Sourire de Volatilité (IV vs Strike)")
+        plot_layout = QVBoxLayout()
+
+        self.fig = Figure(figsize=(10, 7))
+        self.canvas = FigureCanvas(self.fig)
+        plot_layout.addWidget(self.canvas)
+        
+        plot_group.setLayout(plot_layout)
+        main_layout.addWidget(plot_group)
+
+        main_layout.setStretchFactor(plot_group, 1)
+
+# ----------------------------------------------------------------------
+# Classe principale (OptionPricingApp) - Mise à jour de l'UI et Logique
+# ----------------------------------------------------------------------
 class OptionPricingApp(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Option Pricer") # Titre de la fenêtre principale
-        self.setGeometry(100, 100, 1200, 800)
+        self.setWindowTitle("Option Pricer")
+        self.setGeometry(100, 100, 1400, 900)
 
         self.data_fetcher = DataFetcher()
         self.option_models = OptionModels()
@@ -50,25 +238,27 @@ class OptionPricingApp(QWidget):
         self.q = None
         self.historical_vol = None
         self.current_ticker = None
+        self.pricing_method = "N/A" # Nouvelle variable pour la méthode de pricing (IV ou Hist)
         
-        # Ajout des attributs pour stocker les paramètres de l'option calculés
-        # Ces attributs seront utilisés par les fonctions de tracé des Grecs
         self.K = None 
         self.T = None 
         self.option_type = None 
-        self.current_sigma = None # Volatilité utilisée pour le dernier calcul des Grecs
+        self.current_sigma = None 
 
         self.init_ui()
 
     def init_ui(self):
         self.tab_widget = QTabWidget()
 
+        # ----------------------------------
+        # 1. Calculateur d'Option (BSM - European)
+        # ----------------------------------
         option_calculator_widget = QWidget()
         option_calculator_layout = QHBoxLayout(option_calculator_widget)
 
-        # --- Panneau de contrôle à gauche (du premier onglet) ---
+        # --- Panneau de contrôle (BSM) ---
         control_panel_layout = QVBoxLayout()
-        control_panel_group = QGroupBox("Paramètres de l'option")
+        control_panel_group = QGroupBox("Paramètres de l'option (BSM)") 
         control_form_layout = QFormLayout()
 
         self.ticker_input = QLineEdit("AAPL")
@@ -93,10 +283,10 @@ class OptionPricingApp(QWidget):
         control_form_layout.addRow("Position:", self.position_combo)
 
         self.fetch_data_button = QPushButton("Récupérer les Données")
-        self.fetch_data_button.clicked.connect(self.fetch_data)
+        self.fetch_data_button.clicked.connect(lambda: self.fetch_data_for_tab(self.ticker_input.text(), self))
         control_form_layout.addRow(self.fetch_data_button)
 
-        self.calculate_button = QPushButton("Calculer Prix et Grecs")
+        self.calculate_button = QPushButton("Calculer Prix et Grecs (BSM)")
         self.calculate_button.clicked.connect(self.calculate_option_metrics)
         control_form_layout.addRow(self.calculate_button)
 
@@ -110,7 +300,7 @@ class OptionPricingApp(QWidget):
 
         option_calculator_layout.addLayout(control_panel_layout, 1)
 
-        # --- Panneau d'affichage à droite (du premier onglet) ---
+        # --- Panneau d'affichage (BSM) ---
         display_panel_layout = QVBoxLayout()
 
         current_data_group = QGroupBox("Données Actuelles")
@@ -124,18 +314,17 @@ class OptionPricingApp(QWidget):
         current_data_layout.addRow("Prix Actuel (S):", self.live_price_label)
         current_data_layout.addRow("Taux Sans Risque SOFR (r):", self.risk_free_rate_label)
         current_data_layout.addRow("Rendement Dividende (q):", self.dividend_yield_label)
-        current_data_layout.addRow("Volatilité Utilisée (σ):", self.historical_vol_label) # Mise à jour du libellé
-        current_data_layout.addRow("Prix de l'option:", self.bs_price_label)
+        current_data_layout.addRow("Volatilité Utilisée (σ):", self.historical_vol_label)
+        current_data_layout.addRow("Prix de l'option (BSM):", self.bs_price_label)
         current_data_group.setLayout(current_data_layout)
         display_panel_layout.addWidget(current_data_group)
 
-        greeks_group = QGroupBox("Grecs")
+        greeks_group = QGroupBox("Grecs (BSM)")
         greeks_table_layout = QGridLayout()
         self.greeks_table = QTableWidget(1, 5)
         self.greeks_table.setHorizontalHeaderLabels(["Delta", "Gamma", "Theta (par jour)", "Vega", "Rho"])
         self.greeks_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.greeks_table.setEditTriggers(QTableWidget.NoEditTriggers)
-        # Connecter le signal cellClicked pour gérer les clics sur les Grecs
         self.greeks_table.cellClicked.connect(self.handle_greek_click)
 
         for col in range(5):
@@ -156,21 +345,44 @@ class OptionPricingApp(QWidget):
 
         option_calculator_layout.addLayout(display_panel_layout, 2)
 
-        self.tab_widget.addTab(option_calculator_widget, "Calculateur d'Option")
+        # Ajout des onglets dans l'ordre: BSM, CRR, Simulation, Smile
+        self.tab_widget.addTab(option_calculator_widget, "1. Calculateur d'Option (BSM)")
 
+        # ----------------------------------
+        # 2. Modèle CRR (American)
+        # ----------------------------------
+        self.crr_tab = CRRModelTab(self)
+        self.tab_widget.addTab(self.crr_tab, "2. Modèle CRR (Américain)")
+
+        # ----------------------------------
+        # 3. Simulation Call Price
+        # ----------------------------------
         self.simulation_tab = CallPriceSimulationTab()
-        self.tab_widget.addTab(self.simulation_tab, "Simulation Call Price")
+        self.tab_widget.addTab(self.simulation_tab, "3. Simulation Call Price")
+        
+        # ----------------------------------
+        # 4. Sourire de Volatilité
+        # ----------------------------------
+        self.smile_tab = VolatilitySmileTab(self)
+        self.tab_widget.addTab(self.smile_tab, "4. Smile de Volatilité")
+
 
         main_window_layout = QVBoxLayout()
         main_window_layout.addWidget(self.tab_widget)
         self.setLayout(main_window_layout)
 
-        self.fetch_data() # Appel initial pour peupler les données au démarrage de l'app
+        # On appelle la méthode générique au démarrage
+        self.fetch_data_for_tab(self.ticker_input.text(), self) 
 
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
-    def fetch_data(self):
-        ticker_symbol = self.ticker_input.text().strip().upper()
+    # --- NOUVELLE MÉTHODE : Fetch générique ---
+    def fetch_data_for_tab(self, ticker_symbol, source_tab):
+        """
+        Récupère les données financières pour un ticker donné et met à jour tous les onglets.
+        source_tab peut être self (onglet BSM) ou self.crr_tab.
+        """
+        ticker_symbol = ticker_symbol.strip().upper()
         if not ticker_symbol:
             QMessageBox.warning(self, "Erreur", "Veuillez entrer un symbole de ticker.")
             self.current_ticker = "N/A"
@@ -178,77 +390,67 @@ class OptionPricingApp(QWidget):
             self.r = None
             self.q = None
             self.historical_vol = None
-            self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.historical_vol)
+            # Mettre à jour tous les onglets avec N/A
+            self.update_all_tabs_financial_data()
             return
         
         self.current_ticker = ticker_symbol
-
         live_price = self.data_fetcher.get_live_price(ticker_symbol)
+        
         if live_price is not None:
-            self.live_price_label.setText(f"{live_price:.2f}")
             self.S = live_price
+            self.r = self.data_fetcher.get_sofr_rate() or 0.01 
+            self.q = self.data_fetcher.get_dividend_yield(ticker_symbol) 
+            self.historical_vol = self.data_fetcher.get_historical_volatility(ticker_symbol, period="1y")
+
         else:
-            self.live_price_label.setText("Erreur / N/A")
             self.S = None
+            self.r = 0.01
+            self.q = 0.0
+            self.historical_vol = 0.20
             QMessageBox.warning(self, "Données Manquantes",
                                  f"Impossible de récupérer le prix de {ticker_symbol}. Les calculs suivants pourraient être inexacts.")
-            self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.historical_vol)
-            return
+            
+        # Si la source est BSM, met à jour le champ ticker (sinon il vient du CRR ou Smile)
+        if source_tab == self:
+            self.ticker_input.setText(self.current_ticker)
 
-        # --- REMPLACEMENT DU TAUX SANS RISQUE PAR LE SOFR ---
-        sofr_rate = self.data_fetcher.get_sofr_rate()
-        if sofr_rate is not None:
-            self.risk_free_rate_label.setText(f"{sofr_rate*100:.2f}%")
-            self.r = sofr_rate
-        else:
-            self.risk_free_rate_label.setText("Erreur / N/A")
-            self.r = None
-            QMessageBox.warning(self, "Taux SOFR Manquant",
-                                 "Impossible de récupérer le taux SOFR. Le calcul des options utilisera un taux par défaut (1%).")
-            # Utiliser une valeur par défaut raisonnable si le SOFR n'est pas disponible
-            self.r = 0.04 # 4% par défaut si SOFR non récupérable
+        # Mise à jour de l'affichage dans tous les onglets
+        self.update_all_tabs_financial_data(source_tab)
 
-        dividend_yield_for_calculation = self.data_fetcher.get_dividend_yield(ticker_symbol)
+    # --- NOUVELLE MÉTHODE : Mise à jour globale des données ---
+    def update_all_tabs_financial_data(self, source_tab=None):
+        """Met à jour les labels d'information financière dans tous les onglets."""
         
-        # Pour l'affichage, on prend le rendement YFinance direct
-        dividend_yield_for_display = 0.0 
-        try:
-            ticker = yf.Ticker(ticker_symbol)
-            info = ticker.info
-            temp_dividend = info.get("dividendYield")
-            if temp_dividend is not None:
-                dividend_yield_for_display = float(temp_dividend) # Afficher en %
-        except Exception:
-            pass
-
-        self.dividend_yield_label.setText(f"{dividend_yield_for_display:.2f}%")
-        self.q = dividend_yield_for_calculation
-
-
-        historical_vol = self.data_fetcher.get_historical_volatility(ticker_symbol, period="1y")
-        if historical_vol is not None:
-            # L'affichage de la volatilité historique est conservé pour information
-            self.historical_vol_label.setText(f"Historique: {historical_vol*100:.2f}%")
-            self.historical_vol = historical_vol
-        else:
-            self.historical_vol_label.setText("Erreur / N/A")
-            self.historical_vol = None
-            QMessageBox.warning(self, "Volatilité Historique Manquante",
-                                 f"Impossible de calculer la volatilité historique pour {ticker_symbol}. "
-                                 "Les calculs du prix BSM et des Grecs utiliseront une volatilité par défaut (20%).")
+        # Le prix et la vol utilisée (sigma) ne sont définis qu'après un calculate_option_metrics
+        # On utilise une vol historique/par défaut tant qu'il n'y a pas eu de calcul BSM/IV.
+        sigma_to_use = self.current_sigma if self.current_sigma is not None else (self.historical_vol or 0.20)
+        pricing_method_to_use = self.pricing_method if self.pricing_method != "N/A" else "Vol Historique"
         
-        # On passe la vol historique à la simulation tab initialement, elle sera mise à jour dans calculate_option_metrics
-        self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.historical_vol)
+        # 1. Onglet BSM (Calculateur d'Option)
+        self.live_price_label.setText(f"{self.S:.2f}" if self.S is not None else "N/A")
+        self.risk_free_rate_label.setText(f"{self.r*100:.2f}%" if self.r is not None else "N/A")
+        self.dividend_yield_label.setText(f"{self.q*100:.2f}%" if self.q is not None else "N/A")
+        self.historical_vol_label.setText(f"Historique: {(self.historical_vol or 0.0)*100:.2f}%")
+        
+        # 2. Onglet CRR (Modèle CRR)
+        self.crr_tab.update_financial_data(self.S, self.r, self.q, sigma_to_use, self.current_ticker, pricing_method_to_use)
+        
+        # 3. Onglet Simulation
+        self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, sigma_to_use)
+        
+        # 4. Onglet Smile (uniquement le Ticker)
+        if self.current_ticker and source_tab != self.smile_tab: # Évite de boucler si l'input vient du Smile
+            self.smile_tab.ticker_input.setText(self.current_ticker)
 
+    # --- MÉTHODE EXISTANTE : Calcul BSM ---
     def calculate_option_metrics(self):
         try:
-            # Récupération des inputs de l'interface
             self.K = float(self.strike_input.text())
-            self.option_type = self.option_type_combo.currentText() # 'call' ou 'put'
+            self.option_type = self.option_type_combo.currentText() 
 
-            # Conversion de la date de l'interface en objet datetime pour yfinance
             maturity_qdate = self.maturity_date_input.date()
-            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day()) 
+            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day())
             
             # --- Vérifications préalables ---
             if self.S is None or self.r is None or self.q is None or self.current_ticker is None:
@@ -257,24 +459,21 @@ class OptionPricingApp(QWidget):
             if self.K <= 0:
                 QMessageBox.warning(self, "Erreur de Strike", "Le prix d'exercice doit être supérieur à 0.")
                 return
-            
-            # Appel de la nouvelle fonction qui retourne l'IV, le Prix Marché et la date réelle
+
+            # --- RÉCUPÉRATION DE L'IV ET DU PRIX MARCHÉ ---
             fetched_iv, market_price, closest_date = self.data_fetcher.get_implied_volatility_and_price(
                 self.current_ticker, self.K, maturity_datetime, self.option_type 
             )
             
-            # Mise à jour du temps jusqu'à l'échéance (T) en utilisant la date d'expiration réelle
+            # Mise à jour du temps T
             if closest_date:
-                # La date d'expiration réelle (closest_date) est un string 'YYYY-MM-DD'
                 closest_date_obj = datetime.strptime(closest_date, '%Y-%m-%d').date()
                 today = date.today()
                 time_difference = closest_date_obj - today
                 self.T = time_difference.days / 365.0
-                if self.T < 0: 
-                    self.T = 1e-6 # Petite valeur positive si date est passée
-                    QMessageBox.information(self, "Avertissement Date", "La date d'expiration la plus proche est déjà passée. Le temps à l'échéance (T) est forcé à une valeur minimale.")
+                if self.T < 0: self.T = 1e-6 
             else:
-                # Fallback sur la date de l'utilisateur si la chaîne d'options n'a pas pu être récupérée
+                # Calcul basé sur la date du calendrier si pas de chaîne d'options trouvée
                 today = date.today()
                 time_difference = maturity_datetime.date() - today
                 self.T = time_difference.days / 365.0
@@ -284,18 +483,14 @@ class OptionPricingApp(QWidget):
 
             # --- Logique de choix de la Volatilité (IV vs Historique) ---
             if fetched_iv is not None and fetched_iv > 0.001 and market_price is not None:
-                # Utilisation de l'IV du marché
                 sigma = fetched_iv
-                pricing_method = "IV Marché"
-                bs_price = market_price # Le prix BSM est le prix marché si on utilise l'IV
+                self.pricing_method = "IV Marché"
+                bs_price = market_price
                 
             else:
-                # Fallback sur la volatilité historique (ou par défaut 20%)
                 sigma = self.historical_vol if self.historical_vol is not None and self.historical_vol > 0 else 0.20
-                pricing_method = "Vol Historique (Fallback)"
-                market_price = None 
+                self.pricing_method = "Vol Historique (Fallback)"
                 
-                # Calcul du prix Black-Scholes avec le fallback sigma
                 bs_price = self.option_models.black_scholes_price(self.S, self.K, self.T, self.r, sigma, self.q, self.option_type)
                 
                 if self.historical_vol is None or self.historical_vol <= 0 or fetched_iv is None:
@@ -303,14 +498,13 @@ class OptionPricingApp(QWidget):
                                          f"L'IV du marché n'est pas disponible. "
                                          f"Utilisation d'une volatilité ({sigma*100:.2f}%) pour les calculs.")
 
-            self.current_sigma = sigma # Stocker la sigma utilisée pour les tracés de Grecs
+            self.current_sigma = sigma 
             
             # --- Mise à jour de l'affichage ---
-            
-            self.historical_vol_label.setText(f"Volatilité Utilisée ({pricing_method}): {self.current_sigma*100:.2f}%")
+            self.historical_vol_label.setText(f"Utilisée ({self.pricing_method}): {self.current_sigma*100:.2f}%")
             self.bs_price_label.setText(f"{bs_price:.4f} $")
 
-            # Calcul des Grecs (en utilisant la sigma choisie)
+            # Calcul des Grecs (BSM)
             greeks = self.option_models.calculate_greeks(
                 self.S, self.K, self.T, self.r, self.current_sigma, self.q, self.option_type
             )
@@ -322,31 +516,202 @@ class OptionPricingApp(QWidget):
             self.greeks_table.setItem(0, 3, QTableWidgetItem(f"{greeks.get('vega', 0)/100:.4f}")) 
             self.greeks_table.setItem(0, 4, QTableWidgetItem(f"{greeks.get('rho', 0):.4f}"))
 
-            # Mettre à jour les données pour l'onglet de simulation
+            # Mettre à jour les données pour les autres onglets
+            # On utilise le `self.pricing_method` mis à jour pour les autres onglets
             self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.current_sigma)
-
-
+            self.crr_tab.update_financial_data(self.S, self.r, self.q, self.current_sigma, self.current_ticker, self.pricing_method) 
+        
         except ValueError:
             QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques valides pour K.")
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Calcul", f"Une erreur inattendue est survenue: {e}")
 
-    #Gérer le clic sur un Grec
+    # --- NOUVELLE MÉTHODE : Calcul CRR (Correction de l'affichage de la Vol) ---
+    def calculate_crr_metrics(self):
+        try:
+            # Récupération des inputs depuis l'onglet CRR
+            K = float(self.crr_tab.strike_input.text())
+            option_type = self.crr_tab.option_type_combo.currentText() 
+            N = int(self.crr_tab.steps_input.text())
+
+            maturity_qdate = self.crr_tab.maturity_date_input.date()
+            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day())
+
+            # La volatilité (sigma) est celle qui a été déterminée par l'onglet BSM (IV Marché ou Historique)
+            sigma = self.current_sigma if self.current_sigma is not None and self.current_sigma > 0 else (self.historical_vol or 0.20)
+            pricing_method_used = self.pricing_method if self.pricing_method != "N/A" else "Vol Historique"
+
+            # Vérifications des données
+            if self.S is None or self.r is None or self.q is None or sigma is None:
+                QMessageBox.warning(self, "Données Manquantes", "Veuillez Récupérer/Synchroniser les données de l'actif (S, r, q, σ) d'abord.")
+                return
+            if K <= 0 or N <= 0 or N > 10000:
+                QMessageBox.warning(self, "Erreur de Paramètres", "K doit être > 0, et le nombre de pas (N) doit être entre 1 et 10000.")
+                return
+
+            # Calcul du Temps T (basé sur la date du CRR)
+            today = date.today()
+            time_difference = maturity_datetime.date() - today
+            T = time_difference.days / 365.0
+            if T <= 0:
+                QMessageBox.warning(self, "Erreur de Maturité", "La date d'échéance doit être dans le futur.")
+                return
+            
+            # Mise à jour explicite de la volatilité utilisée dans l'affichage CRR
+            self.crr_tab.vol_label.setText(f"{sigma*100:.2f}% ({pricing_method_used})")
+
+            # Calcul du prix CRR
+            crr_price = self.option_models.cox_ross_rubinstein_price(
+                self.S, K, T, self.r, self.q, sigma, N, option_type
+            )
+            self.crr_tab.crr_price_label.setText(f"{crr_price:.4f} $")
+
+            # Calcul des Grecs CRR
+            greeks = self.option_models.calculate_greeks_crr(
+                self.S, K, T, self.r, self.q, sigma, N, option_type
+            )
+
+            # Mise à jour de la table des Grecs CRR
+            self.crr_tab.greeks_table.setItem(0, 0, QTableWidgetItem(f"{greeks.get('delta', 0):.4f}"))
+            self.crr_tab.greeks_table.setItem(0, 1, QTableWidgetItem(f"{greeks.get('gamma', 0):.4f}"))
+            self.crr_tab.greeks_table.setItem(0, 2, QTableWidgetItem(f"{greeks.get('theta', 0):.4f}"))
+            self.crr_tab.greeks_table.setItem(0, 3, QTableWidgetItem(f"{greeks.get('vega', 0)/100:.4f}"))
+            self.crr_tab.greeks_table.setItem(0, 4, QTableWidgetItem(f"{greeks.get('rho', 0):.4f}"))
+
+        except ValueError:
+            QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques/entières valides pour K et N.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur de Calcul CRR", f"Une erreur inattendue est survenue: {e}")
+
+    # Tracé Payoff CRR 
+    def plot_crr_payoff(self):
+        try:
+            K = float(self.crr_tab.strike_input.text())
+            option_type = self.crr_tab.option_type_combo.currentText()
+            position = self.crr_tab.position_combo.currentText()
+
+            price_str = self.crr_tab.crr_price_label.text()
+            if "N/A" in price_str:
+                QMessageBox.warning(self, "Prix CRR Manquant",
+                                    "Veuillez d'abord calculer le prix CRR avant de tracer le payoff.")
+                return
+
+            premium = float(price_str.replace('$', '').strip())
+            
+            if K <= 0:
+                QMessageBox.warning(self, "Erreur de Strike", "Le prix d'exercice doit être supérieur à 0.")
+                return
+
+            if option_type == "call":
+                breakeven = K + premium
+            elif option_type == "put":
+                breakeven = K - premium
+            
+            self.crr_tab.fig.clear()
+            ax = self.crr_tab.fig.add_subplot(111)
+
+            self.strategy_manager.plot_payoff(
+                K, premium, option_type, position, ax=ax
+            )
+
+            title_text = f"Payoff de l'Option Américaine {position.capitalize()} {option_type.capitalize()} (K={K:.2f}, Premium={premium:.4f})"
+            title_text += f"\nBreakeven = {breakeven:.2f}"
+            
+            ax.set_title(title_text)
+            self.crr_tab.canvas.draw()
+
+        except ValueError:
+            QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques valides.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}")
+
+    # Tracé du Sourire de Volatilité (Correction: Zoom et Logique)
+    def plot_volatility_smile(self):
+        try:
+            ticker_symbol = self.smile_tab.ticker_input.text().strip().upper()
+            maturity_qdate = self.smile_tab.maturity_date_input.date()
+            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day())
+
+            if not ticker_symbol:
+                QMessageBox.warning(self, "Erreur", "Veuillez entrer un symbole de ticker.")
+                return
+            
+            # Synchroniser les données financières (S)
+            self.fetch_data_for_tab(ticker_symbol, self.smile_tab)
+            
+            df_smile, closest_date = self.data_fetcher.get_volatility_smile_data(ticker_symbol, maturity_datetime)
+
+            if df_smile is None or closest_date is None or df_smile.empty:
+                QMessageBox.warning(self, "Données Manquantes",
+                                     f"Impossible de récupérer la chaîne d'options pour {ticker_symbol} autour de {maturity_datetime.strftime('%Y-%m-%d')}. "
+                                     "Vérifiez le ticker et la disponibilité des options.")
+                self.smile_tab.fig.clear()
+                self.smile_tab.canvas.draw()
+                return
+            
+            current_price = self.S # Utilise S synchronisé
+            
+            self.smile_tab.fig.clear()
+            ax = self.smile_tab.fig.add_subplot(111)
+
+            # Conversion IV en %
+            df_smile['IV_percent'] = df_smile['impliedVolatility'] * 100
+            
+            calls = df_smile[df_smile['type'] == 'call']
+            puts = df_smile[df_smile['type'] == 'put']
+
+            ax.scatter(calls['strike'], calls['IV_percent'], label='Calls (IV)', marker='o', s=30)
+            ax.scatter(puts['strike'], puts['IV_percent'], label='Puts (IV)', marker='x', s=30)
+            
+            # Ligne de prix actuel (ATM)
+            if current_price:
+                ax.axvline(current_price, color='r', linestyle='--', label=f'Prix Actuel (S): {current_price:.2f}')
+                
+                # Correction 3: Zoom par défaut autour de S (ne doit pas couper le graphique)
+                min_strike = df_smile['strike'].min()
+                max_strike = df_smile['strike'].max()
+                
+                # Détermine les limites du graphique pour le zoom
+                lower_limit = max(min_strike, current_price * 0.8)
+                upper_limit = min(max_strike, current_price * 1.2)
+                
+                # Assure un minimum d'écart pour éviter l'écrasement
+                if upper_limit - lower_limit < 10 and max_strike - min_strike > 10:
+                    center = current_price if current_price else (min_strike + max_strike) / 2
+                    lower_limit = max(min_strike, center - 5)
+                    upper_limit = min(max_strike, center + 5)
+                    
+                ax.set_xlim(lower_limit, upper_limit)
+                # Zoom vertical de l'IV (optionnel)
+                ax.set_ylim(df_smile['IV_percent'].min() * 0.9, df_smile['IV_percent'].max() * 1.1)
+
+                ax.set_ylim(0, 200)
+
+            # Mise en forme du graphique
+            ax.set_title(f"Sourire de Volatilité pour {ticker_symbol} (Échéance: {closest_date})")
+            ax.set_xlabel('Prix d\'Exercice (Strike K)')
+            ax.set_ylabel('Volatilité Implicite (IV) en %')
+            ax.grid(True, linestyle='--', alpha=0.7)
+            ax.legend()
+            self.smile_tab.canvas.draw()
+            
+            # Affichage de l'image de Volatility Smile comme référence pour l'utilisateur
+            # 
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du sourire: {e}. Détails: {e.__class__.__name__}: {e}")
+            self.smile_tab.fig.clear()
+            self.smile_tab.canvas.draw()
+
+
+    # --- MÉTHODES EXISTANTES (handle_greek_click, plot_greek_evolution, plot_option_payoff) ---
     def handle_greek_click(self, row, column):
-        """
-        Gère les clics sur les cellules de la table des Grecs et affiche un graphique.
-        """
         greek_names = ["Delta", "Gamma", "Theta", "Vega", "Rho"]
         if column < len(greek_names):
             greek_name = greek_names[column]
             self.plot_greek_evolution(greek_name)
     
-    #Tracer l'évolution d'un Grec
     def plot_greek_evolution(self, greek_name):
-        """
-        Calcule et trace l'évolution d'un Grec donné en fonction du prix du sous-jacent.
-        """
-        # Vérifiez que toutes les données nécessaires sont disponibles
         if self.S is None or self.K is None or self.T is None or \
            self.r is None or self.q is None or self.current_sigma is None or \
            self.option_type is None:
@@ -354,17 +719,13 @@ class OptionPricingApp(QWidget):
                                  f"Veuillez d'abord calculer les métriques de l'option (Prix, Grecs) pour pouvoir tracer l'évolution du {greek_name}.")
             return
 
-        # Définir une plage de prix du sous-jacent pour le tracé
-        # Environ +/- 30% du prix actuel pour une bonne visualisation
         S_range = np.linspace(self.S * 0.7, self.S * 1.3, 100)
-        
         greek_values = []
         for s_val in S_range:
             greeks = self.option_models.calculate_greeks(
                 S=float(s_val), K=self.K, T=self.T, r=self.r, sigma=self.current_sigma, q=self.q, option_type=self.option_type
             )
             
-            # Gérer les noms spécifiques des Grecs
             if greek_name == "Delta":
                 value = greeks.get('delta', 0)
             elif greek_name == "Gamma":
@@ -372,7 +733,7 @@ class OptionPricingApp(QWidget):
             elif greek_name == "Theta":
                 value = greeks.get('theta', 0)
             elif greek_name == "Vega":
-                value = greeks.get('vega', 0) / 100 # Ajuster pour le % de vol
+                value = greeks.get('vega', 0) / 100 
             elif greek_name == "Rho":
                 value = greeks.get('rho', 0)
             else:
@@ -380,8 +741,7 @@ class OptionPricingApp(QWidget):
             
             greek_values.append(value)
 
-        # Créer et afficher la fenêtre de dialogue pour le graphique
-        dialog = PlottingDialog(self, title=f"Évolution du {greek_name}")
+        dialog = PlottingDialog(self, title=f"Évolution du {greek_name} (BSM)")
         ax = dialog.fig.add_subplot(111)
         ax.plot(S_range, greek_values)
         ax.axvline(self.S, color='r', linestyle='--', label=f'S₀ Actuel: {self.S:.2f}')
@@ -391,51 +751,42 @@ class OptionPricingApp(QWidget):
         ax.grid(True)
         ax.legend()
         dialog.canvas.draw()
-        dialog.exec_() # Affiche la boîte de dialogue de manière modale
+        dialog.exec_()
 
 
     def plot_option_payoff(self):
         try:
-            # Récupérer les valeurs de K et option_type directement des inputs
             K = float(self.strike_input.text())
             option_type = self.option_type_combo.currentText()
             position = self.position_combo.currentText()
 
             bs_price_str = self.bs_price_label.text()
-            if bs_price_str == "N/A":
+            if "N/A" in bs_price_str:
                 QMessageBox.warning(self, "Prix BSM Manquant",
-                                    "Veuillez d'abord calculer le prix Black-Scholes avant de tracer le payoff. "
-                                    "Le payoff utilisera ce prix comme prime.")
+                                    "Veuillez d'abord calculer le prix Black-Scholes avant de tracer le payoff. ")
                 return
 
-            # On retire le '$' pour la conversion en float
             premium = float(bs_price_str.replace('$', '').strip())
 
             if premium <= 0 and position == 'long':
                  QMessageBox.information(self, "Premium Nul/Négatif",
-                                     "Le prix Black-Scholes calculé (premium) est nul ou négatif pour un achat. "
-                                     "Le tracé ne sera pas représentatif d'une prime positive normale.")
+                                     "Le prix Black-Scholes calculé (premium) est nul ou négatif pour un achat. ")
 
             if K <= 0:
                 QMessageBox.warning(self, "Erreur de Strike", "Le prix d'exercice doit être supérieur à 0.")
                 return
 
-            # --- Calcul du Breakeven ---
             breakeven = 0.0
             if option_type == "call":
                 if position == "long":
                     breakeven = K + premium
                 elif position == "short":
-                    # Pour un short call, le breakeven est le strike + prime, 
-                    # mais le profit est limité à premium si le prix de l'actif reste sous K.
-                    # On affiche le point où la perte commence (au-dessus de K+premium, le profit devient négatif).
-                    breakeven = K + premium 
+                    breakeven = K - premium
             elif option_type == "put":
                 if position == "long":
                     breakeven = K - premium
                 elif position == "short":
-                    # Pour un short put, le breakeven est le strike - prime.
-                    breakeven = K - premium 
+                    breakeven = K + premium 
             
             self.fig.clear()
             ax = self.fig.add_subplot(111)
@@ -444,26 +795,34 @@ class OptionPricingApp(QWidget):
                 K, premium, option_type, position, ax=ax
             )
 
-            # --- Mise à jour du titre du graphique avec le Breakeven ---
-            title_text = f"Payoff de l'Option {position.capitalize()} {option_type.capitalize()} (K={K:.2f}, Premium={premium:.4f})"
+            title_text = f"Payoff de l'Option Européenne {position.capitalize()} {option_type.capitalize()} (K={K:.2f}, Premium={premium:.4f})"
             if breakeven is not None:
                 title_text += f"\nBreakeven = {breakeven:.2f}"
             
             ax.set_title(title_text)
-
             self.canvas.draw()
 
         except ValueError:
             QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques valides pour K.")
         except Exception as e:
-            QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}. Détails: {e.__class__.__name__}: {e}")
+            QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}")
+
 
     def on_tab_changed(self, index):
-        if index == self.tab_widget.indexOf(self.simulation_tab):
-            # Utilisez les attributs de la classe si les données sont déjà chargées
-            if self.current_ticker is not None and self.S is not None and self.r is not None and self.q is not None and self.historical_vol is not None:
-                # La simulation tab est mise à jour avec le self.current_sigma qui est l'IV ou le fallback
-                self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, self.current_sigma) 
-            else:
-                QMessageBox.information(self, "Données Manquantes",
-                                        "Veuillez récupérer les données financières (Ticker, Prix Actuel, Taux Sans Risque, Dividende, Volatilité) dans l'onglet 'Calculateur d'Option' d'abord.")
+        # Synchronisation des données entre l'onglet BSM et les autres onglets
+        if self.S is not None: # Ne synchronise que si les données ont été chargées au moins une fois
+            sigma_to_use = self.current_sigma if self.current_sigma is not None else (self.historical_vol or 0.20)
+            pricing_method_to_use = self.pricing_method if self.pricing_method != "N/A" else "Vol Historique"
+
+            if index == self.tab_widget.indexOf(self.crr_tab):
+                self.crr_tab.update_financial_data(self.S, self.r, self.q, sigma_to_use, self.current_ticker, pricing_method_to_use)
+            
+            elif index == self.tab_widget.indexOf(self.simulation_tab):
+                self.simulation_tab.update_financial_data(self.current_ticker, self.S, self.r, self.q, sigma_to_use)
+            
+            elif index == self.tab_widget.indexOf(self.smile_tab):
+                self.smile_tab.ticker_input.setText(self.current_ticker)
+            
+        else:
+            QMessageBox.information(self, "Données Manquantes",
+                                    "Veuillez récupérer les données financières (Ticker, Prix Actuel, Taux Sans Risque, Dividende, Volatilité) dans l'onglet 'Calculateur d'Option' d'abord.")
