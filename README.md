@@ -3,50 +3,63 @@
   Option Pricer
 </h1>
 
-[![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/) 
+[![Python 3.8+](https://img.shields.io/badge/python-3.8+-blue.svg)](https://www.python.org/downloads/) 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Status: Active](https://img.shields.io/badge/status-Active-brightgreen.svg)](#)
 
-Une application Python pour l'évaluation d'options financières utilisant les modèles **Black-Scholes** (Européen) et **Cox-Ross-Rubinstein (CRR)** (Américain).
+Une application Python complète pour l'évaluation d'options financières utilisant les modèles **Black-Scholes-Merton** (Européen) et **Cox-Ross-Rubinstein (CRR)** (Américain). Interface interactive PyQt5 avec visualisations en temps réel et données de marché actualisées.
 
 ## Fonctionnalités
 
-### Calcul des Options
+### 🎯 Calcul des Options
 - **Modèles de Tarification** :
-    - **Black-Scholes-Merton** (BSM) pour les options européennes avec dividendes.
-    - **Cox-Ross-Rubinstein** (CRR) pour les options américaines (arbre binomial).
-- **Grecs complets** : Delta, Gamma, Theta (par jour), Vega, Rho avec visualisation interactive.
-- **Volatilité Implicite (IV)** : Automatiquement récupérée pour une tarification plus précise.
+    - **Black-Scholes-Merton** (BSM) pour les options européennes avec rendement de dividende.
+    - **Cox-Ross-Rubinstein** (CRR) pour les options américaines avec arbre binomial dynamique.
+- **Grecs complets** : 
+    - Delta, Gamma, Theta (par jour), Vega, Rho
+    - Visualisation interactive dans une tableau dédié
+- **Volatilité Implicite (IV)** : Extraction automatique des données de marché via yfinance
+- **Support des stratégies** : Positions long/short pour calls et puts
 
-### Données de Marché en Temps Réel
-- **Prix en direct** via Yahoo Finance.
-- **Taux SOFR** (Secured Overnight Financing Rate) via l'API FRED pour le taux sans risque.
-- **Rendement de dividende** automatiquement récupéré.
+### 📊 Données de Marché en Temps Réel
+- **Prix en direct** via Yahoo Finance (yfinance)
+- **Taux SOFR** (Secured Overnight Financing Rate) depuis l'API FRED pour le taux sans risque
+- **Rendement de dividende** récupéré automatiquement
+- **Chaînes d'options complètes** (Options Chains) pour analyse du sourire de volatilité
 
-### Visualisation et Analyse
-- **Payoffs d'options** avec breakeven automatiquement calculé.
-- **Positions long/short** pour calls et puts.
-- **Simulation matricielle** : Impact de la volatilité et du prix sous-jacent sur le prix d'un call.
+### 📈 Visualisation et Analyse
+- **Payoffs d'options** avec break-even calculé automatiquement
+- **Stratégies multi-jambes** : Visualisation combinée long/short
+- **Simulation matricielle** : Impact croisé volatilité/prix sous-jacent sur le prix du call
 - **Sourire de Volatilité (Volatility Smile)** :
-    - Tracé de l'IV en fonction du Strike pour une échéance donnée.
-    - **Lissage par Spline Cubique** pour une courbe claire et continue, facilitant l'analyse du Skew et du Kurtosis. 
+    - Tracé IV vs Strike pour une échéance donnée
+    - **Interpolation par Spline Cubique** pour une courbe lisse et continue
+    - Analyse du Skew et Kurtosis de la volatilité
+    - Support Calls OTM (droite) et Puts OTM (gauche)
 
-### Interface Utilisateur
-- **Interface PyQt5** intuitive avec onglets.
-- **Validation des entrées** avec contrôles automatiques.
-- **Gestion d'erreurs** complète avec messages informatifs.
-- **Graphiques intégrés** avec Matplotlib.
+### 🎨 Interface Utilisateur
+- **Interface PyQt5** moderne avec onglets multiples
+- **Validation des entrées** avec contrôles QValidator
+- **Gestion d'erreurs** complète avec messages informatifs
+- **Graphiques intégrés** Matplotlib avec zoom et interaction
+- **Synchronisation des données** entre onglets
 
 ## Installation
 
-1. Clonez le dépôt :
+### Prérequis
+- **Python 3.8+** (testé avec Python 3.9, 3.10, 3.11)
+- **pip** ou **conda** pour la gestion des dépendances
+- **Clé API FRED** (gratuite) pour les taux SOFR
+
+### Étapes d'installation
+
+1. **Clonez le dépôt** :
 ```bash
-git clone https://github.com/nono271105/option_pricer
+git clone https://github.com/nono271105/option_pricer.git
 cd option_pricer
-````
+```
 
-2.  Créez un environnement virtuel (recommandé) :
-
-<!-- end list -->
+2. **Créez un environnement virtuel** (fortement recommandé) :
 
 ```bash
 python -m venv venv
@@ -54,86 +67,170 @@ source venv/bin/activate  # Sur Unix/macOS
 venv\Scripts\activate     # Sur Windows
 ```
 
-3.  Installez les dépendances :
-
-<!-- end list -->
+3. **Installez les dépendances** :
 
 ```bash
 pip install -r requirements.txt
 ```
 
-4.  Créez un fichier `.env` :
+4. **Configurez les variables d'environnement** - Créez un fichier `.env` à la racine du projet :
 
-<!-- end list -->
+```env
+# Clé API FRED pour les taux SOFR
+# Obtenir une clé gratuite sur https://fred.stlouisfed.org/
+FRED_API_KEY=votre_cle_fred_ici
+```
+
+5. **Vérifiez l'installation** :
 
 ```bash
-# Nécessaire pour le taux sans risque (SOFR)
-FRED_API_KEY=votre_cle_fred_api
+python -c "import PyQt5, yfinance, scipy; print('✓ Dépendances installées')"
 ```
 
 ## Utilisation
 
-### Lancement
+### Lancement de l'application
 
 ```bash
 python main.py
 ```
 
-### Onglet "Calculateur BSM"
+L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 
-1.  **Configuration de base** :
-      - Entrez un symbole boursier (ex: AAPL, MSFT, TSLA).
-      - Définissez le prix d'exercice (K) et la date d'échéance.
-2.  **Calculs et visualisation** :
-      - "Récupérer les Données" : Synchronise le prix, r, q, et la volatilité historique.
-      - "Calculer Prix et Grecs (BSM)" : Utilise l'IV de marché (si disponible) ou la Volatilité Historique pour la tarification et les Grecs.
------
+### 📑 Onglet 1: "Calculateur BSM" (Black-Scholes-Merton)
 
-### Onglet "Modèle CRR (Américain)"
+**Paramètres d'entrée** :
+1. Entrez un symbole boursier (ex: AAPL, MSFT, TSLA, SPY)
+2. Définissez le prix d'exercice (K) et la date d'échéance
+3. Choisissez le type (Call/Put) et la position (Long/Short)
 
-  - Calcule le prix des **options américaines** pour un exercice anticipé potentiel.
-  - Utilisez le paramètre **"Nombre de pas (N)"** pour ajuster la précision de l'arbre binomial.
-  - Affiche le prix et les Grecs spécifiques au modèle CRR.
+**Actions** :
+- **Récupérer les Données** : Synchronise 
+  - Prix actuel (S) via yfinance
+  - Taux SOFR (r) via l'API FRED
+  - Rendement de dividende (q)
+  - Volatilité historique (252 jours)
+  - Volatilité implicite (IV) si disponible en marché
 
------
+- **Calculer Prix et Grecs (BSM)** : 
+  - Tarif l'option selon le modèle Black-Scholes-Merton
+  - Utilise l'IV de marché si disponible, sinon la volatilité historique
+  - Calcule les 5 Grecs : Δ, Γ, Θ, ν, ρ
 
-### Onglet "Sourire de Volatilité"
+- **Tracer le Payoff** : 
+  - Visualise le P&L à maturité
+  - Identifie automatiquement le break-even
 
-  - **Sélectionnez un Ticker et une Date d'Échéance.**
-  - Cliquez sur **"Afficher le Sourire de Volatilité"** pour :
-    1.  Récupérer la chaîne d'options complète pour cette échéance.
-    2.  Nettoyer et filtrer les données IV non valides.
-    3.  Tracer l'ensemble des points (Calls et Puts) et la **courbe lissée par Spline Cubique**.
-    4.  Visualiser le prix actuel de l'actif (ligne pointillée rouge) par rapport aux Strikes.
+**Résultats affichés** :
+- Tableau avec les Grecs en temps réel
+- Graphique du payoff interactif
+- Source de volatilité utilisée (Marché IV vs Historique)
 
------
+---
 
-### Onglet "Simulation Call Price"
+### 🔢 Onglet 2: "Modèle CRR (Américain)"
 
-1.  **Paramètres automatiques** :
+**Particularités** :
+- Calcule le prix des **options américaines** (exercice anticipé possible)
+- Utilise un **arbre binomial dynamique** (modèle Cox-Ross-Rubinstein)
 
-      - Les données (S, K, T, $\sigma$, r, q) du calculateur BSM sont automatiquement transférées.
-      - Les plages de simulation sont calculées autour de ces valeurs.
+**Paramètres spécifiques** :
+- **Nombre de pas (N)** : Ajustez la précision de l'arbre (50-500 recommandé)
+  - N ↑ = Précision ↑ mais calcul plus lent
+  - N ↓ = Calcul rapide mais moins précis
 
-2.  **Simulation matricielle** :
+**Résultats** :
+- Prix CRR vs prix BSM (comparaison)
+- Grecs spécifiques au modèle binomial
+- Visualisation du payoff américain
 
-      - Lancez la simulation pour voir l'impact croisé de la volatilité et du prix sous-jacent sur le prix du Call.
-      - **Code couleur** : du vert (prix bas) au rouge (prix élevé) pour une analyse rapide.
+---
+
+### 📊 Onglet 3: "Sourire de Volatilité"
+
+**Objectif** : Analyser la structure de la volatilité implicite du marché
+
+**Utilisation** :
+1. Sélectionnez un Ticker et une Date d'Échéance
+2. Cliquez sur **"Afficher le Sourire de Volatilité"**
+
+**Traitement des données** :
+- Récupère la chaîne d'options complète (Calls et Puts)
+- Filtre les données invalides ou non liquides
+- Trace chaque point (IV vs Strike) avec code couleur Calls/Puts
+- Applique une **interpolation Spline Cubique** pour une courbe lisse
+
+**Analyse** :
+- Identifiez le **Skew** : asymétrie de l'IV par rapport au Strike ATM
+- Détectez le **Kurtosis** : bombement ou aplatissement de la courbe
+- Analysez l'impact des dividendes et des taux sur la volatilité
+
+**Ligne pointillée rouge** : Prix actuel de l'actif (référence)
+
+---
+
+### 📈 Onglet 4: "Simulation Call Price"
+
+**Synchronisation automatique** :
+- Récupère automatiquement les données du calculateur BSM (S, K, T, σ, r, q)
+- Pas besoin de re-saisir les paramètres
+
+**Simulation matricielle** :
+- **Axes** : 
+  - Abscisse : Prix sous-jacent (varié autour de S)
+  - Ordonnée : Volatilité (varié autour de σ)
+- **Cellules** : Prix théorique du Call pour chaque combinaison
+
+**Code couleur** :
+- 🟢 Vert = Prix bas
+- 🟡 Jaune = Prix moyen
+- 🔴 Rouge = Prix élevé
+
+**Utilité** :
+- Comprendre la sensibilité du prix du call
+- Identifier les zones de profitabilité
+- Analyser l'impact croisé S/σ (Gamma × Vega)
 
 ## Structure du Projet
 
 ```
 option_pricer/
-├── main.py                 # Point d'entrée de l'application
-├── gui_app.py             # Interface utilisateur principale, gestion des onglets CRR et Smile
-├── option_models.py       # Modèles Black-Scholes et CRR, calcul des Grecs
-├── data_fetcher.py        # Récupération des données (yfinance + FRED API)
-├── strategy_manager.py    # Calculs de payoff et stratégies
-├── simulation_tab.py      # Interface de simulation matricielle
-├── requirements.txt       # Dépendances Python
-└── README.md             # Documentation
+├── main.py                  # Point d'entrée principal
+├── gui_app.py              # Interface PyQt5 - Onglets BSM et CRR
+├── option_models.py        # Moteur de calcul
+│   ├── Black-Scholes-Merton (BSM)
+│   ├── Cox-Ross-Rubinstein (CRR)
+│   └── Calcul des Grecs (Δ, Γ, Θ, ν, ρ)
+├── data_fetcher.py         # API Data
+│   ├── yfinance (prix, IV, options chains)
+│   ├── FRED API (taux SOFR)
+│   └── Dividendes
+├── strategy_manager.py     # Calculs de payoff et stratégies
+├── simulation_tab.py       # Interface onglet simulation matricielle
+├── volatility_smile_tab.py # Interface onglet sourire de volatilité
+├── requirements.txt        # Dépendances Python
+├── .env                    # Variables d'environnement (API FRED_KEY)
+├── .gitignore             # Fichiers à ignorer en Git
+└── README.md              # Documentation (ce fichier)
 ```
+
+### Dépendances principales
+
+| Package | Usage |
+|---------|-------|
+| `PyQt5` | Interface graphique |
+| `yfinance` | Données de marché (prix, IV, options chains) |
+| `matplotlib` | Visualisation des graphiques |
+| `scipy` | Calculs statistiques (CDF, interpolation) |
+| `pandas` | Manipulation de données |
+| `numpy` | Calculs numériques |
+| `requests` | Requêtes HTTP (FRED API) |
+| `python-dotenv` | Gestion des variables d'environnement |
 
 ## Licence
 
 Distribué sous la licence MIT. Voir `LICENSE` pour plus d'informations.
+
+---
+
+**Dernière mise à jour** : Novembre 2025
