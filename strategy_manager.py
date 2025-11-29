@@ -1,23 +1,31 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Literal, Optional
 
 class StrategyManager:
-    def __init__(self):
+    def __init__(self) -> None:
         pass
 
-    def calculate_single_option_payoff(self, S_range, K, premium, option_type, position):
+    def calculate_single_option_payoff(
+        self, 
+        S_range: np.ndarray, 
+        K: float, 
+        premium: float, 
+        option_type: Literal['call', 'put'], 
+        position: Literal['long', 'short']
+    ) -> np.ndarray:
         """
-        Calcule le payoff à maturité pour une seule option.
+        Calcule le payoff net à maturité pour une seule option.
 
-        Paramètres:
-        S_range (np.array): Gamme de prix de l'actif sous-jacent à l'échéance.
-        K (float): Prix d'exercice.
-        premium (float): Prime payée (pour achat) ou reçue (pour vente).
-        option_type (str): 'call' ou 'put'.
-        position (str): 'long' (achat) ou 'short' (vente).
+        Args:
+            S_range: Gamme de prix de l'actif sous-jacent à l'échéance
+            K: Prix d'exercice
+            premium: Prime payée (long) ou reçue (short)
+            option_type: 'call' ou 'put'
+            position: 'long' (achat) ou 'short' (vente)
 
-        Retourne:
-        np.array: Le payoff net pour chaque prix dans S_range.
+        Returns:
+            np.ndarray: Le payoff net pour chaque prix dans S_range
         """
         if option_type == 'call':
             gross_payoff = np.maximum(S_range - K, 0)
@@ -34,18 +42,25 @@ class StrategyManager:
             raise ValueError("position doit être 'long' ou 'short'")
         return net_payoff
 
-    def plot_payoff(self, K, premium, option_type, position, title="", ax=None):
+    def plot_payoff(
+        self, 
+        K: float, 
+        premium: float, 
+        option_type: Literal['call', 'put'], 
+        position: Literal['long', 'short'], 
+        title: str = "", 
+        ax: Optional[object] = None
+    ) -> None:
         """
         Trace le payoff à maturité pour une seule option.
 
-        Paramètres:
-        K (float): Prix d'exercice.
-        premium (float): Prime de l'option.
-        option_type (str): 'call' ou 'put'.
-        position (str): 'long' (achat) ou 'short' (vente).
-        title (str): Titre du graphique.
-        ax (matplotlib.axes._axes.Axes, optional): Axe Matplotlib sur lequel tracer.
-                                                  Crée un nouvel axe si None.
+        Args:
+            K: Prix d'exercice
+            premium: Prime de l'option
+            option_type: 'call' ou 'put'
+            position: 'long' (achat) ou 'short' (vente)
+            title: Titre du graphique
+            ax: Axe Matplotlib optionnel (crée un nouvel axe si None)
         """
         # Définir une plage de prix de l'actif sous-jacent pour le tracé
         # Étendre la plage autour du strike pour bien voir le payoff

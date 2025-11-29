@@ -1,4 +1,5 @@
 import numpy as np
+from typing import Optional, Dict, Tuple
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit,
     QPushButton, QComboBox, QFormLayout, QGroupBox, QGridLayout,
@@ -11,19 +12,20 @@ from datetime import date
 from option_models import OptionModels
 
 class CallPriceSimulationTab(QWidget):
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.option_models = OptionModels()
+        self.option_models: OptionModels = OptionModels()
 
-        self.ticker_symbol = "N/A"
-        self.S_current = None
-        self.r_current = None
-        self.q_current = None
-        self.historical_vol_current = None
+        self.ticker_symbol: str = "N/A"
+        self.S_current: Optional[float] = None
+        self.r_current: Optional[float] = None
+        self.q_current: Optional[float] = None
+        self.historical_vol_current: Optional[float] = None
 
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
+        """Initialise l'interface utilisateur."""
         main_layout = QVBoxLayout()
 
         params_group = QGroupBox("Paramètres de la simulation Call Price")

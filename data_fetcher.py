@@ -5,14 +5,16 @@ from dotenv import load_dotenv
 import os
 import pandas as pd
 import numpy as np
+from typing import Optional, Tuple
 
 load_dotenv()
 
 class DataFetcher:
-    def __init__(self):
-        self.fred_api_key = os.getenv("FRED_API_KEY")
+    def __init__(self) -> None:
+        self.fred_api_key: Optional[str] = os.getenv("FRED_API_KEY")
 
-    def get_live_price(self, ticker_symbol):
+    def get_live_price(self, ticker_symbol: str) -> Optional[float]:
+        """Récupère le prix en direct du dernier jour de trading."""
         try:
             ticker = yf.Ticker(ticker_symbol)
             todays_data = ticker.history(period='1d')
@@ -23,7 +25,8 @@ class DataFetcher:
             print(f"Erreur lors de la récupération du prix en direct pour {ticker_symbol}: {e}")
             return None
 
-    def get_historical_volatility(self, ticker_symbol, period="1y"):
+    def get_historical_volatility(self, ticker_symbol: str, period: str = "1y") -> Optional[float]:
+        """Récupère la volatilité historique annualisée."""
         try:
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(period=period)
@@ -41,10 +44,12 @@ class DataFetcher:
             print(f"Erreur lors de la récupération de la volatilité historique pour {ticker_symbol}: {e}")
             return None
 
-    def get_sofr_rate(self):
+    def get_sofr_rate(self) -> Optional[float]:
         """
-        Récupère le taux SOFR (Secured Overnight Financing Rate) le plus récent
-        depuis l'API de FRED.
+        Récupère le taux SOFR le plus récent depuis l'API FRED.
+        
+        Returns:
+            Optional[float]: Taux SOFR décimalisé (ex: 0.05 pour 5%) ou None
         """
         url = f"https://api.stlouisfed.org/fred/series/observations?series_id=SOFR&api_key={self.fred_api_key}&file_type=json"
         try:
@@ -70,9 +75,15 @@ class DataFetcher:
             print(f"Une erreur inattendue est survenue lors de la récupération du SOFR : {e}")
             return None
 
-    def get_dividend_yield(self, ticker_symbol):
+    def get_dividend_yield(self, ticker_symbol: str) -> float:
         """
-        Récupère le rendement de dividende annuel pour un ticker donné.
+        Récupère le rendement de dividende annuel.
+        
+        Args:
+            ticker_symbol: Symbole du titre
+            
+        Returns:
+            float: Rendement de dividende annuel décimalisé (défaut: 0.0)
         """
         try:
             ticker = yf.Ticker(ticker_symbol)
@@ -87,11 +98,20 @@ class DataFetcher:
             print(f"Erreur lors de la récupération du rendement de dividende pour {ticker_symbol}: {e}")
             return 0.0
 
-    def get_option_data_chain(self, ticker_symbol, maturity_datetime):
+    def get_option_data_chain(
+        self, 
+        ticker_symbol: str, 
+        maturity_datetime: datetime
+    ) -> Tuple[Optional[object], Optional[str]]:
         """
-        Récupère la chaîne d'options yfinance pour la date d'expiration la plus proche
-        de la date choisie (maturity_datetime).
-        Retourne l'objet option_chain (calls et puts) et la date d'expiration réelle (string YYYY-MM-DD).
+        Récupère la chaîne d'options pour la date d'expiration la plus proche.
+        
+        Args:
+            ticker_symbol: Symbole du titre
+            maturity_datetime: Date d'expiration souhaitée
+            
+        Returns:
+            Tuple[Optional[OptionChain], Optional[str]]: (option_chain, date_expiration_réelle)
         """
         try:
             ticker = yf.Ticker(ticker_symbol)
@@ -114,9 +134,24 @@ class DataFetcher:
             print(f"Erreur lors de la récupération de la chaîne d'options: {e}")
             return None, None
             
-    def get_implied_volatility_and_price(self, ticker_symbol, strike, maturity_datetime, option_type):
+    def get_implied_volatility_and_price(
+        self, 
+        ticker_symbol: str, 
+        strike: float, 
+        maturity_datetime: datetime, 
+        option_type: str
+    ) -> Tuple[Optional[float], Optional[float], Optional[str]]:
         """
-        Récupère l'IV et le prix du marché (Last Price) pour un strike donné.
+        Récupère l'IV et le prix du marché pour un strike donné.
+        
+        Args:
+            ticker_symbol: Symbole du titre
+            strike: Prix d'exercice
+            maturity_datetime: Date d'expiration
+            option_type: 'call' ou 'put'
+            
+        Returns:
+            Tuple[Optional[float], Optional[float], Optional[str]]: (IV, prix, date_expiration)
         """
         opt_chain, closest_date = self.get_option_data_chain(ticker_symbol, maturity_datetime)
 
@@ -154,13 +189,20 @@ class DataFetcher:
         return iv, price, closest_date
 
     # Récupération des données pour le Sourire de Volatilité 
-    def get_volatility_smile_data(self, ticker_symbol, maturity_datetime):
+    def get_volatility_smile_data(
+        self, 
+        ticker_symbol: str, 
+        maturity_datetime: datetime
+    ) -> Tuple[Optional[pd.DataFrame], Optional[str]]:
         """
-        Récupère les Strikes et Implied Volatility pour les Calls et Puts d'une expiration donnée.
-
-        Retourne:
-        DataFrame contenant ['strike', 'impliedVolatility', 'type'] pour Calls et Puts combinés,
-        et la date d'expiration réelle (string YYYY-MM-DD).
+        Récupère les Strikes et IV pour les Calls et Puts d'une expiration donnée.
+        
+        Args:
+            ticker_symbol: Symbole du titre
+            maturity_datetime: Date d'expiration
+            
+        Returns:
+            Tuple[Optional[DataFrame], Optional[str]]: (DataFrame avec ['strike', 'impliedVolatility', 'type'], date_expiration)
         """
         opt_chain, closest_date = self.get_option_data_chain(ticker_symbol, maturity_datetime)
 

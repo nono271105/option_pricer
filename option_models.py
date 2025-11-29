@@ -1,10 +1,32 @@
 import numpy as np
 from scipy.stats import norm
+from typing import Dict, Literal, Optional
 
 class OptionModels:
-    def black_scholes_price(self, S, K, T, r, sigma, q, option_type='call'):
+    def black_scholes_price(
+        self, 
+        S: float, 
+        K: float, 
+        T: float, 
+        r: float, 
+        sigma: float, 
+        q: float, 
+        option_type: Literal['call', 'put'] = 'call'
+    ) -> float:
         """
         Calcule le prix d'une option européenne en utilisant le modèle Black-Scholes.
+        
+        Args:
+            S: Prix actuel de l'actif sous-jacent
+            K: Prix d'exercice (strike)
+            T: Temps jusqu'à expiration (en années)
+            r: Taux sans risque annualisé
+            sigma: Volatilité annualisée
+            q: Rendement de dividende annualisé
+            option_type: 'call' ou 'put'
+            
+        Returns:
+            float: Prix théorique de l'option
         """
         if T <= 0:
             if option_type == 'call':
@@ -31,9 +53,30 @@ class OptionModels:
 
         return price
 
-    def calculate_greeks(self, S, K, T, r, sigma, q, option_type='call'):
+    def calculate_greeks(
+        self, 
+        S: float, 
+        K: float, 
+        T: float, 
+        r: float, 
+        sigma: float, 
+        q: float, 
+        option_type: Literal['call', 'put'] = 'call'
+    ) -> Dict[str, float]:
         """
-        Calcule les Grecs pour le modèle Black-Scholes.
+        Calcule les Grecs (Delta, Gamma, Theta, Vega, Rho) pour le modèle Black-Scholes.
+        
+        Args:
+            S: Prix actuel de l'actif sous-jacent
+            K: Prix d'exercice
+            T: Temps jusqu'à expiration (en années)
+            r: Taux sans risque annualisé
+            sigma: Volatilité annualisée
+            q: Rendement de dividende annualisé
+            option_type: 'call' ou 'put'
+            
+        Returns:
+            Dict[str, float]: Dictionnaire avec clés 'delta', 'gamma', 'theta', 'vega', 'rho'
         """
         if T <= 0 or sigma <= 1e-6:
             return {'delta': 0, 'gamma': 0, 'theta': 0, 'vega': 0, 'rho': 0}
@@ -83,9 +126,32 @@ class OptionModels:
             'rho': rho
         }
 
-    def cox_ross_rubinstein_price(self, S, K, T, r, q, sigma, N, option_type):
+    def cox_ross_rubinstein_price(
+        self, 
+        S: float, 
+        K: float, 
+        T: float, 
+        r: float, 
+        q: float, 
+        sigma: float, 
+        N: int, 
+        option_type: Literal['call', 'put']
+    ) -> float:
         """
         Calcule le prix d'une option Américaine en utilisant le modèle binomial CRR.
+        
+        Args:
+            S: Prix actuel de l'actif sous-jacent
+            K: Prix d'exercice
+            T: Temps jusqu'à expiration (en années)
+            r: Taux sans risque annualisé
+            q: Rendement de dividende annualisé
+            sigma: Volatilité annualisée
+            N: Nombre de pas dans l'arbre binomial
+            option_type: 'call' ou 'put'
+            
+        Returns:
+            float: Prix théorique de l'option américaine
         """
         if T <= 0 or N <= 0:
             if option_type == 'call':
@@ -133,9 +199,34 @@ class OptionModels:
 
         return option_values[0]
 
-    def calculate_greeks_crr(self, S, K, T, r, q, sigma, N, option_type, epsilon=1e-4):
+    def calculate_greeks_crr(
+        self, 
+        S: float, 
+        K: float, 
+        T: float, 
+        r: float, 
+        q: float, 
+        sigma: float, 
+        N: int, 
+        option_type: Literal['call', 'put'], 
+        epsilon: float = 1e-4
+    ) -> Dict[str, float]:
         """
-        Calcule les Grecs du modèle CRR par différences finies (méthode numérique).
+        Calcule les Grecs du modèle CRR par différences finies.
+        
+        Args:
+            S: Prix actuel de l'actif sous-jacent
+            K: Prix d'exercice
+            T: Temps jusqu'à expiration (en années)
+            r: Taux sans risque annualisé
+            q: Rendement de dividende annualisé
+            sigma: Volatilité annualisée
+            N: Nombre de pas dans l'arbre binomial
+            option_type: 'call' ou 'put'
+            epsilon: Pas pour les différences finies (par défaut 1e-4)
+            
+        Returns:
+            Dict[str, float]: Dictionnaire avec clés 'delta', 'gamma', 'theta', 'vega', 'rho'
         """
         
         # Fonction utilitaire pour le prix CRR

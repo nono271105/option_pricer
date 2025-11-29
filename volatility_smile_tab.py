@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+from typing import Optional, Tuple
 from PyQt5.QtWidgets import (
     QWidget, QVBoxLayout, QGroupBox, QLineEdit,
     QPushButton, QFormLayout, QMessageBox, QDateEdit
@@ -24,17 +25,18 @@ class VolatilitySmileTab(QWidget):
     Logique : Puts OTM à gauche (K < S), Calls OTM à droite (K >= S).
     Calcul de l'IV via inversion de BSM à partir du prix Mid.
     """
-    def __init__(self, parent=None):
+    def __init__(self, parent: Optional[QWidget] = None) -> None:
         super().__init__(parent)
-        self.data_fetcher = DataFetcher()
-        self.option_models = OptionModels()
-        self.current_S = None
-        self.current_r = 0.05
-        self.current_q = 0.0
+        self.data_fetcher: DataFetcher = DataFetcher()
+        self.option_models: OptionModels = OptionModels()
+        self.current_S: Optional[float] = None
+        self.current_r: float = 0.05
+        self.current_q: float = 0.0
 
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
+        """Initialise l'interface utilisateur."""
         main_layout = QVBoxLayout(self)
 
         # ------------------- INPUT GROUP -------------------
@@ -241,7 +243,7 @@ class VolatilitySmileTab(QWidget):
             self.ax.clear()
 
             # Courbe interpolée
-            self.ax.plot(strikes_interp, ivs_interp, color="#0062FF", linewidth=2.5, label='Smile (Interpolé)')
+            self.ax.plot(strikes_interp, ivs_interp, color="#0062FF", linewidth=2, label='Smile')
 
             # Points OTM réels
             puts_df = smile_df[smile_df['type'] == 'put']
