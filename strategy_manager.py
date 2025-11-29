@@ -82,26 +82,3 @@ if __name__ == "__main__":
     premium_put = 3
     manager.plot_payoff(K_put, premium_put, 'put', 'short', "Payoff Vente Put")
     plt.show()
-
-    # Pour montrer comment combiner des stratégies (future extension)
-    # def plot_strategy(options, S_range):
-    #     total_payoff = np.zeros_like(S_range, dtype=float)
-    #     for opt in options:
-    #         K, premium, option_type, position = opt['K'], opt['premium'], opt['option_type'], opt['position']
-    #         total_payoff += manager.calculate_single_option_payoff(S_range, K, premium, option_type, position)
-    #     plt.figure(figsize=(10, 6))
-    #     plt.plot(S_range, total_payoff, label="Stratégie Combinée")
-    #     plt.axhline(0, color='grey', linestyle='--')
-    #     plt.xlabel("Prix de l'actif sous-jacent à l'échéance (S)")
-    #     plt.ylabel("Profit/Perte")
-    #     plt.title("Payoff - Stratégie Combinée")
-    #     plt.grid(True)
-    #     plt.legend()
-    #     plt.show()
-
-    # S_range_combined = np.linspace(80, 120, 200)
-    # options_example = [
-    #     {'K': 100, 'premium': 5, 'option_type': 'call', 'position': 'long'},
-    #     {'K': 105, 'premium': 2, 'option_type': 'call', 'position': 'short'}
-    # ]
-    # plot_strategy(options_example, S_range_combined)
