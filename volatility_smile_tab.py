@@ -241,16 +241,11 @@ class VolatilitySmileTab(QWidget):
             self.ax.clear()
 
             # Courbe interpolée
-            self.ax.plot(strikes_interp, ivs_interp, color='#2962FF', linewidth=2.5, label='Smile (Interpolé)')
+            self.ax.plot(strikes_interp, ivs_interp, color="#0062FF", linewidth=2.5, label='Smile (Interpolé)')
 
             # Points OTM réels
             puts_df = smile_df[smile_df['type'] == 'put']
             calls_df = smile_df[smile_df['type'] == 'call']
-            
-            self.ax.scatter(puts_df['strike'], puts_df['iv']*100, 
-                           color='orange', marker='x', s=50, label='Puts OTM', zorder=5)
-            self.ax.scatter(calls_df['strike'], calls_df['iv']*100, 
-                           color="#FF0000", marker='o', s=50, label='Calls OTM', zorder=5)
 
             # Ligne verticale du prix actuel (ATM)
             self.ax.axvline(current_price, color='red', linestyle='--', 
