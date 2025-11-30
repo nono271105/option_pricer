@@ -125,10 +125,12 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 - Tableau avec les Grecs en temps réel
 - Graphique du payoff interactif
 - Source de volatilité utilisée (Marché IV vs Historique)
+  
+<img width="1440" height="900" alt="Onglet 1: Calculateur BSM" src="https://github.com/user-attachments/assets/30ea8f99-96ac-49a9-ba34-484ecb03efb1" />
 
 ---
 
-### 🔢 Onglet 2: "Modèle CRR (Américain)"
+### 🔢 Onglet 2: "Modèle CRR (Cox-Ross-Rubinstein)"
 
 **Particularités** :
 - Calcule le prix des **options américaines** (exercice anticipé possible)
@@ -143,33 +145,12 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 - Prix CRR vs prix BSM (comparaison)
 - Grecs spécifiques au modèle binomial
 - Visualisation du payoff américain
+  
+<img width="1440" height="900" alt="Onglet 2: Modèle CRR" src="https://github.com/user-attachments/assets/ecb446c5-7d08-45c6-8761-847e2fda4c6d" />
 
 ---
 
-### 📊 Onglet 3: "Sourire de Volatilité"
-
-**Objectif** : Analyser la structure de la volatilité implicite du marché
-
-**Utilisation** :
-1. Sélectionnez un Ticker et une Date d'Échéance
-2. Cliquez sur **"Afficher le Sourire de Volatilité"**
-
-**Traitement des données** :
-- Récupère la chaîne d'options complète (Calls et Puts)
-- Filtre les données invalides ou non liquides
-- Trace chaque point (IV vs Strike) avec code couleur Calls/Puts
-- Applique une **interpolation Spline Cubique** pour une courbe lisse
-
-**Analyse** :
-- Identifiez le **Skew** : asymétrie de l'IV par rapport au Strike ATM
-- Détectez le **Kurtosis** : bombement ou aplatissement de la courbe
-- Analysez l'impact des dividendes et des taux sur la volatilité
-
-**Ligne pointillée rouge** : Prix actuel de l'actif (référence)
-
----
-
-### 📈 Onglet 4: "Simulation Call Price"
+### 📈 Onglet 3: "Simulation Call Price"
 
 **Synchronisation automatique** :
 - Récupère automatiquement les données du calculateur BSM (S, K, T, σ, r, q)
@@ -190,6 +171,35 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 - Comprendre la sensibilité du prix du call
 - Identifier les zones de profitabilité
 - Analyser l'impact croisé S/σ (Gamma × Vega)
+  
+<img width="1440" height="900" alt="Onglet 3: Simulation Call Price" src="https://github.com/user-attachments/assets/b9099d90-6d76-47b0-b9b6-904ba023f67c" />
+
+---
+
+### 📊 Onglet 4: "Smile de Volatilité"
+
+**Objectif** : Analyser la structure de la volatilité implicite du marché
+
+**Utilisation** :
+1. Sélectionnez un Ticker et une Date d'Échéance
+2. Cliquez sur **"Afficher le Smile de Volatilité"**
+
+**Traitement des données** :
+- Récupère la chaîne d'options complète (Calls et Puts)
+- Filtre les données invalides ou non liquides
+- Trace chaque point (IV vs Strike) avec code couleur Calls/Puts
+- Applique une **interpolation Spline Cubique** pour une courbe lisse
+
+**Analyse** :
+- Identifiez le **Skew** : asymétrie de l'IV par rapport au Strike ATM
+- Détectez le **Kurtosis** : bombement ou aplatissement de la courbe
+- Analysez l'impact des dividendes et des taux sur la volatilité
+
+**Ligne pointillée rouge** : Prix actuel de l'actif (référence)
+
+<img width="1440" height="900" alt="Onglet 4: Sourire de Volatilité" src="https://github.com/user-attachments/assets/07769499-978b-4687-9b82-67e29c1fcb3b" />
+
+---
 
 ## Structure du Projet
 
