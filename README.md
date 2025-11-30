@@ -237,6 +237,8 @@ option_pricer/
 | `requests` | Requêtes HTTP (FRED API) |
 | `python-dotenv` | Gestion des variables d'environnement |
 
+---
+
 ## Licence
 
 Distribué sous la licence MIT. Voir `LICENSE` pour plus d'informations.
