@@ -4,7 +4,7 @@ from PyQt5.QtWidgets import (
     QMessageBox, QTableWidget, QTableWidgetItem, QHeaderView, QDateEdit,
     QTabWidget, QDialog
 )
-from PyQt5.QtCore import QDate
+from PyQt5.QtCore import QDate, QThread, pyqtSignal
 from PyQt5.QtGui import QDoubleValidator, QIntValidator
 
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
@@ -12,6 +12,7 @@ from matplotlib.figure import Figure
 import numpy as np
 from datetime import date, datetime 
 from scipy.interpolate import make_interp_spline
+from concurrent.futures import ThreadPoolExecutor
 
 from data_fetcher import DataFetcher
 from option_models import OptionModels
@@ -123,6 +124,7 @@ class CRRModelTab(QWidget):
         self.greeks_table.setHorizontalHeaderLabels(["Delta", "Gamma", "Theta (par jour)", "Vega", "Rho"])
         self.greeks_table.horizontalHeader().setSectionResizeMode(QHeaderView.Stretch)
         self.greeks_table.setEditTriggers(QTableWidget.NoEditTriggers)
+        self.greeks_table.cellClicked.connect(lambda row, col: self.app.handle_crr_greek_click(row, col))
 
         for col in range(5):
             self.greeks_table.setItem(0, col, QTableWidgetItem("N/A"))
@@ -295,9 +297,10 @@ class OptionPricingApp(QWidget):
 
         self.tab_widget.currentChanged.connect(self.on_tab_changed)
 
-    def fetch_data_for_tab(self, ticker_symbol, source_tab):
+    def fetch_data_for_tab(self, ticker_symbol: str, source_tab: QWidget) -> None:
         """
-        Récupère les données financières pour un ticker donné et met à jour tous les onglets.
+        Récupère les données financières en parallèle avec threading.
+        Optimisé pour éviter les freezes UI lors des appels API.
         """
         ticker_symbol = ticker_symbol.strip().upper()
         if not ticker_symbol:
@@ -311,14 +314,29 @@ class OptionPricingApp(QWidget):
             return
         
         self.current_ticker = ticker_symbol
-        live_price = self.data_fetcher.get_live_price(ticker_symbol)
         
+        # Désactiver le bouton pendant le chargement
+        if hasattr(source_tab, 'fetch_data_button'):
+            source_tab.fetch_data_button.setEnabled(False)
+            source_tab.fetch_data_button.setText("⏳ Chargement...")
+        
+        # Récupérer les données en parallèle avec ThreadPoolExecutor
+        with ThreadPoolExecutor(max_workers=4) as executor:
+            # Soumettre tous les appels API en parallèle
+            price_future = executor.submit(self.data_fetcher.get_live_price, ticker_symbol)
+            sofr_future = executor.submit(self.data_fetcher.get_sofr_rate)
+            dividend_future = executor.submit(self.data_fetcher.get_dividend_yield, ticker_symbol)
+            vol_future = executor.submit(self.data_fetcher.get_historical_volatility, ticker_symbol, "1y")
+            
+            # Récupérer les résultats
+            live_price = price_future.result(timeout=10) if price_future else None
+            self.r = sofr_future.result(timeout=10) or 0.01 if sofr_future else 0.01
+            self.q = dividend_future.result(timeout=10) or 0.0 if dividend_future else 0.0
+            self.historical_vol = vol_future.result(timeout=10) or 0.20 if vol_future else 0.20
+        
+        # Traiter les résultats
         if live_price is not None:
             self.S = live_price
-            self.r = self.data_fetcher.get_sofr_rate() or 0.01 
-            self.q = self.data_fetcher.get_dividend_yield(ticker_symbol) 
-            self.historical_vol = self.data_fetcher.get_historical_volatility(ticker_symbol, period="1y")
-
         else:
             self.S = None
             self.r = 0.01
@@ -326,9 +344,14 @@ class OptionPricingApp(QWidget):
             self.historical_vol = 0.20
             QMessageBox.warning(self, "Données Manquantes",
                                  f"Impossible de récupérer le prix de {ticker_symbol}. Les calculs suivants pourraient être inexacts.")
-            
+        
         if source_tab == self:
             self.ticker_input.setText(self.current_ticker)
+        
+        # Réactiver le bouton
+        if hasattr(source_tab, 'fetch_data_button'):
+            source_tab.fetch_data_button.setEnabled(True)
+            source_tab.fetch_data_button.setText("Récupérer/Synchroniser les Données")
 
         self.update_all_tabs_financial_data(source_tab)
 
@@ -746,8 +769,69 @@ class OptionPricingApp(QWidget):
         except Exception as e:
             QMessageBox.critical(self, "Erreur de Tracé", f"Une erreur est survenue lors du tracé du payoff: {e}")
 
+    def handle_crr_greek_click(self, row: int, column: int) -> None:
+        """Gère le click sur un Grec du tableau CRR pour afficher son évolution."""
+        greek_names = ["Delta", "Gamma", "Theta", "Vega", "Rho"]
+        if column < len(greek_names):
+            greek_name = greek_names[column]
+            self.plot_crr_greek_evolution(greek_name)
 
-    def on_tab_changed(self, index):
+    def plot_crr_greek_evolution(self, greek_name: str) -> None:
+        """Trace l'évolution d'un Grec du modèle CRR en fonction du prix de l'actif."""
+        try:
+            if self.S is None or self.r is None or self.q is None or self.current_sigma is None:
+                QMessageBox.warning(self, "Données Manquantes", "Veuillez d'abord calculer les Grecs CRR.")
+                return
+
+            K = float(self.crr_tab.strike_input.text())
+            option_type = self.crr_tab.option_type_combo.currentText()
+            N = int(self.crr_tab.steps_input.text())
+
+            maturity_qdate = self.crr_tab.maturity_date_input.date()
+            maturity_datetime = datetime(maturity_qdate.year(), maturity_qdate.month(), maturity_qdate.day())
+            today = date.today()
+            T = (maturity_datetime.date() - today).days / 365.0
+
+            # Plage de prix autour de S actuel
+            S_range = np.linspace(self.S * 0.7, self.S * 1.3, 50)
+            greek_values = []
+
+            for S in S_range:
+                greeks = self.option_models.calculate_greeks_crr(
+                    S, K, T, self.r, self.q, self.current_sigma, N, option_type
+                )
+                
+                if greek_name == "Delta":
+                    greek_values.append(greeks['delta'])
+                elif greek_name == "Gamma":
+                    greek_values.append(greeks['gamma'])
+                elif greek_name == "Theta":
+                    greek_values.append(greeks['theta'])
+                elif greek_name == "Vega":
+                    greek_values.append(greeks['vega'] / 100)
+                elif greek_name == "Rho":
+                    greek_values.append(greeks['rho'])
+
+            dialog = PlottingDialog(self, f"Évolution du {greek_name} (CRR)")
+            ax = dialog.fig.add_subplot(111)
+            ax.plot(S_range, greek_values, linewidth=2, color='steelblue')
+            ax.axvline(self.S, color='red', linestyle='--', label=f'Prix actuel S={self.S:.2f}')
+            ax.set_xlabel("Prix de l'actif sous-jacent (S)")
+            ax.set_ylabel(greek_name)
+            ax.set_title(f"Évolution du {greek_name} - Modèle CRR")
+            ax.grid(True, alpha=0.3)
+            ax.legend()
+            dialog.fig.tight_layout()
+            dialog.canvas.draw()
+            dialog.exec_()
+
+        except ValueError:
+            QMessageBox.warning(self, "Erreur de Saisie", "Veuillez entrer des valeurs numériques valides.")
+        except Exception as e:
+            QMessageBox.critical(self, "Erreur", f"Une erreur est survenue: {e}")
+
+    def on_tab_changed(self, index: int) -> None:
+        """Synchronisation des données entre l'onglet BSM et les autres onglets."""
         # Synchronisation des données entre l'onglet BSM et les autres onglets
         if self.S is not None: # Ne synchronise que si les données ont été chargées au moins une fois
             sigma_to_use = self.current_sigma if self.current_sigma is not None else (self.historical_vol or 0.20)

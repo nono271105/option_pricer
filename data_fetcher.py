@@ -7,6 +7,8 @@ import pandas as pd
 import numpy as np
 from typing import Optional, Tuple
 
+from cache import global_cache
+
 load_dotenv()
 
 class DataFetcher:
@@ -15,11 +17,20 @@ class DataFetcher:
 
     def get_live_price(self, ticker_symbol: str) -> Optional[float]:
         """Récupère le prix en direct du dernier jour de trading."""
+        # Vérifier le cache d'abord
+        cache_key = f"live_price_{ticker_symbol}"
+        cached_price = global_cache.get(cache_key)
+        if cached_price is not None:
+            return cached_price
+        
         try:
             ticker = yf.Ticker(ticker_symbol)
             todays_data = ticker.history(period='1d')
             if not todays_data.empty:
-                return todays_data['Close'].iloc[-1]
+                price = float(todays_data['Close'].iloc[-1])
+                # Stocker dans le cache
+                global_cache.set(cache_key, price)
+                return price
             return None
         except Exception as e:
             print(f"Erreur lors de la récupération du prix en direct pour {ticker_symbol}: {e}")
@@ -27,6 +38,12 @@ class DataFetcher:
 
     def get_historical_volatility(self, ticker_symbol: str, period: str = "1y") -> Optional[float]:
         """Récupère la volatilité historique annualisée."""
+        # Vérifier le cache
+        cache_key = f"vol_{ticker_symbol}_{period}"
+        cached_vol = global_cache.get(cache_key)
+        if cached_vol is not None:
+            return cached_vol
+        
         try:
             ticker = yf.Ticker(ticker_symbol)
             hist = ticker.history(period=period)
@@ -39,6 +56,8 @@ class DataFetcher:
                 return None
             
             annual_volatility = returns.std() * np.sqrt(252)
+            # Stocker dans le cache
+            global_cache.set(cache_key, annual_volatility)
             return annual_volatility
         except Exception as e:
             print(f"Erreur lors de la récupération de la volatilité historique pour {ticker_symbol}: {e}")
@@ -51,6 +70,12 @@ class DataFetcher:
         Returns:
             Optional[float]: Taux SOFR décimalisé (ex: 0.05 pour 5%) ou None
         """
+        # Vérifier le cache (SOFR change rarement en 1h)
+        cache_key = "sofr_rate"
+        cached_rate = global_cache.get(cache_key)
+        if cached_rate is not None:
+            return cached_rate
+        
         url = f"https://api.stlouisfed.org/fred/series/observations?series_id=SOFR&api_key={self.fred_api_key}&file_type=json"
         try:
             response = requests.get(url)
@@ -61,7 +86,10 @@ class DataFetcher:
             if observations:
                 latest_observation = observations[-1]
                 sofr_value = float(latest_observation['value'])
-                return sofr_value / 100.0
+                sofr_decimal = sofr_value / 100.0
+                # Stocker dans le cache
+                global_cache.set(cache_key, sofr_decimal)
+                return sofr_decimal
             else:
                 print("Aucune observation SOFR trouvée dans la réponse de l'API.")
                 return None
@@ -85,14 +113,25 @@ class DataFetcher:
         Returns:
             float: Rendement de dividende annuel décimalisé (défaut: 0.0)
         """
+        # Vérifier le cache
+        cache_key = f"dividend_{ticker_symbol}"
+        cached_div = global_cache.get(cache_key)
+        if cached_div is not None:
+            return cached_div
+        
         try:
             ticker = yf.Ticker(ticker_symbol)
             info = ticker.info
             dividend_yield = info.get("dividendYield")
             
             if dividend_yield is not None:
-                return float(dividend_yield) / 100.0 
+                div_decimal = float(dividend_yield) / 100.0
+                # Stocker dans le cache
+                global_cache.set(cache_key, div_decimal)
+                return div_decimal
             else:
+                # Stocker 0.0 aussi dans le cache pour éviter des requêtes répétées
+                global_cache.set(cache_key, 0.0)
                 return 0.0
         except Exception as e:
             print(f"Erreur lors de la récupération du rendement de dividende pour {ticker_symbol}: {e}")

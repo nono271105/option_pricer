@@ -209,10 +209,11 @@ class OptionModels:
         sigma: float, 
         N: int, 
         option_type: Literal['call', 'put'], 
-        epsilon: float = 1e-4
+        epsilon: float = 1.0
     ) -> Dict[str, float]:
         """
         Calcule les Grecs du modèle CRR par différences finies.
+        Méthode numérique pour options non-européennes (exercice anticipé possible).
         
         Args:
             S: Prix actuel de l'actif sous-jacent
@@ -223,19 +224,19 @@ class OptionModels:
             sigma: Volatilité annualisée
             N: Nombre de pas dans l'arbre binomial
             option_type: 'call' ou 'put'
-            epsilon: Pas pour les différences finies (par défaut 1e-4)
+            epsilon: Pas pour les différences finies (par défaut 1.0 pour meilleure précision numérique)
             
         Returns:
             Dict[str, float]: Dictionnaire avec clés 'delta', 'gamma', 'theta', 'vega', 'rho'
         """
         
         # Fonction utilitaire pour le prix CRR
-        def crr_price(S_local, sigma_local, r_local):
+        def crr_price(S_local: float, sigma_local: float, r_local: float) -> float:
             return self.cox_ross_rubinstein_price(S_local, K, T, r_local, q, sigma_local, N, option_type)
             
         # Delta (dérivée par rapport à S)
         S_plus = S + epsilon
-        S_minus = S - epsilon
+        S_minus = max(S - epsilon, 0.01)  # Éviter les prix négatifs
         C_plus = crr_price(S_plus, sigma, r)
         C_minus = crr_price(S_minus, sigma, r)
         delta = (C_plus - C_minus) / (2 * epsilon)
