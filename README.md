@@ -29,19 +29,18 @@ Une application Python complète pour l'évaluation d'options financières utili
 
 ### 📈 Visualisation et Analyse
 - **Payoffs d'options** avec break-even calculé automatiquement
-- **Stratégies multi-jambes** : Visualisation combinée long/short
 - **Simulation matricielle** : Impact croisé volatilité/prix sous-jacent sur le prix du call
 - **Sourire de Volatilité (Volatility Smile)** :
     - Tracé IV vs Strike pour une échéance donnée
-    - **Interpolation par Spline Cubique** pour une courbe lisse et continue
+    - **Interpolation** par Spline Cubique pour une courbe lisse et continue
     - Analyse du Skew et Kurtosis de la volatilité
-    - Support Calls OTM (droite) et Puts OTM (gauche)
+    - Support Puts OTM (gauche) et Calls OTM (droite)
 
 ### 🎨 Interface Utilisateur
-- **Interface PyQt5** moderne avec onglets multiples
+- **Interface PyQt5** avec onglets multiples
 - **Validation des entrées** avec contrôles QValidator
 - **Gestion d'erreurs** complète avec messages informatifs
-- **Graphiques intégrés** Matplotlib avec zoom et interaction
+- **Graphiques intégrés** Matplotlib
 - **Synchronisation des données** entre onglets
 
 ## Installation
@@ -206,22 +205,19 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 ```
 option_pricer/
 ├── main.py                  # Point d'entrée principal
-├── gui_app.py              # Interface PyQt5 - Onglets BSM et CRR
+├── gui_app.py              # Interface PyQt5
 ├── option_models.py        # Moteur de calcul
 │   ├── Black-Scholes-Merton (BSM)
 │   ├── Cox-Ross-Rubinstein (CRR)
 │   └── Calcul des Grecs (Δ, Γ, Θ, ν, ρ)
 ├── data_fetcher.py         # API Data
-│   ├── yfinance (prix, IV, options chains)
-│   ├── FRED API (taux SOFR)
-│   └── Dividendes
+│   ├── yfinance (prix, IV, options chains, dividendes)
+│   └── FRED API (taux SOFR)
 ├── strategy_manager.py     # Calculs de payoff et stratégies
 ├── simulation_tab.py       # Interface onglet simulation matricielle
 ├── volatility_smile_tab.py # Interface onglet sourire de volatilité
-├── requirements.txt        # Dépendances Python
-├── .env                    # Variables d'environnement (API FRED_KEY)
-├── .gitignore             # Fichiers à ignorer en Git
-└── README.md              # Documentation (ce fichier)
+├── requirements.txt        # Dépendances
+└── README.md              # Documentation
 ```
 
 ### Dépendances principales
