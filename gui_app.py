@@ -19,6 +19,7 @@ from option_models import OptionModels
 from strategy_manager import StrategyManager
 from simulation_tab import CallPriceSimulationTab
 from volatility_smile_tab import VolatilitySmileTab
+from volatility_surface_tab import VolatilitySurfaceTab
 
 class PlottingDialog(QDialog):
     """
@@ -286,6 +287,9 @@ class OptionPricingApp(QWidget):
 
         self.smile_tab = VolatilitySmileTab()
         self.tab_widget.addTab(self.smile_tab, "Smile de Volatilité")
+
+        self.surface_tab = VolatilitySurfaceTab()
+        self.tab_widget.addTab(self.surface_tab, "Surface IV (3D Plotly)")
 
 
         main_window_layout = QVBoxLayout()

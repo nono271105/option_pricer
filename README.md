@@ -200,38 +200,84 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 
 ---
 
+### 🌐 Onglet 5: "Surface IV 3D"
+
+**Objectif** : Visualiser la surface 3D complète de la volatilité implicite
+
+**Axes de la Surface** :
+- **X-axis** : Strike (K) - Prix d'exercice
+- **Y-axis** : Time to Maturity (T) - Jours jusqu'à l'expiration
+- **Z-axis** : Implied Volatility (σ) - Volatilité implicite (en %)
+
+**Utilisation** :
+1. Entrez un Ticker (ex: AAPL, MSFT, TSLA, SPY)
+2. Optionnel : Entrez le prix actuel (sinon récupération automatique)
+3. Cliquez sur **"📈 Calculer la Surface IV"**
+4. La surface 3D s'affiche avec gradient de couleur Plasma
+
+**Interaction Interactive** :
+- **Rotation** : Clic droit + glisse pour tourner la surface
+- **Zoom** : Scroll de la souris ou boutons de zoom
+- **Hover** : Survolez les points/surface pour voir les détails (Strike, Maturité, IV %)
+- **Export** : Cliquez sur **"💾 Exporter (HTML)"** pour sauvegarder en fichier html
+
+**Visualisation** :
+- **Gradient Plasma** : Colormap rouge→bleu pour meilleure distinction des niveaux IV
+- **Surface lissée** : Interpolation Cubic Griddata pour une surface continue
+
+**Calcul** :
+- Récupère les chaînes d'options pour **les dates d'expiration**
+- Extrait les **IV de tous les strikes** disponibles
+- Interpole avec la méthode **Cubic Griddata** pour une surface lisse et continue
+- Affiche à la fois les points bruts ET la surface interpolée
+- Convertit l'IV en pourcentage pour une meilleure lisibilité
+
+**Technologie** :
+- Visualisation avec **Plotly** pour l'interactivité 3D
+- Intégration **QWebEngineView** pour affichage natif dans PyQt5
+- Calcul non-bloquant avec **QThread** et signaux Qt
+- Caching TTL-based (3600s) pour éviter les requêtes API répétées
+
+---
+
 ## Structure du Projet
 
 ```
 option_pricer/
-├── main.py                  # Point d'entrée principal
-├── gui_app.py              # Interface PyQt5
-├── option_models.py        # Moteur de calcul
+├── main.py                        # Point d'entrée principal
+├── gui_app.py                     # Interface PyQt5 (5 onglets)
+├── option_models.py               # Moteur de calcul
 │   ├── Black-Scholes-Merton (BSM)
 │   ├── Cox-Ross-Rubinstein (CRR)
 │   └── Calcul des Grecs (Δ, Γ, Θ, ν, ρ)
-├── data_fetcher.py         # API Data
+├── data_fetcher.py                # API Data avec Caching (TTL=3600s)
 │   ├── yfinance (prix, IV, options chains, dividendes)
-│   └── FRED API (taux SOFR)
-├── strategy_manager.py     # Calculs de payoff et stratégies
-├── simulation_tab.py       # Interface onglet simulation matricielle
-├── volatility_smile_tab.py # Interface onglet sourire de volatilité
-├── requirements.txt        # Dépendances
-└── README.md              # Documentation
+│   ├── FRED API (taux SOFR)
+│   └── DataCache (thread-safe, optimisé)
+├── strategy_manager.py            # Calculs de payoff et stratégies
+├── simulation_tab.py              # Interface onglet simulation matricielle
+├── volatility_smile_tab.py        # Interface onglet sourire de volatilité
+├── volatility_surface_tab.py      # Interface onglet surface 3D Plotly **NOUVEAU**
+├── implied_volatility_surface.py  # Calcul surface 3D **NOUVEAU**
+├── cache.py                       # Module caching TTL-based
+├── requirements.txt               # Dépendances
+└── README.md                      # Documentation
 ```
 
 ### Dépendances principales
 
-| Package | Usage |
-|---------|-------|
-| `PyQt5` | Interface graphique |
-| `yfinance` | Données de marché (prix, IV, options chains) |
-| `matplotlib` | Visualisation des graphiques |
-| `scipy` | Calculs statistiques (CDF, interpolation) |
-| `pandas` | Manipulation de données |
-| `numpy` | Calculs numériques |
-| `requests` | Requêtes HTTP (FRED API) |
-| `python-dotenv` | Gestion des variables d'environnement |
+| Package | Version | Usage |
+|---------|---------|-------|
+| `PyQt5` | >=5.15.0 | Interface graphique |
+| `PyQtWebEngine` | >=5.15.0 | Affichage Plotly dans PyQt5 |
+| `yfinance` | >=0.2.32 | Données de marché (prix, IV, options chains) |
+| `matplotlib` | >=3.7.0 | Visualisation 2D |
+| `plotly` | >=5.17.0 | Visualisation 3D interactive |
+| `scipy` | >=1.9.0 | Calculs statistiques (CDF, interpolation Cubic) |
+| `pandas` | >=2.0.0 | Manipulation de données |
+| `numpy` | >=1.24.0 | Calculs numériques |
+| `requests` | >=2.31.0 | Requêtes HTTP (FRED API) |
+| `python-dotenv` | >=1.0.0 | Gestion des variables d'environnement |
 
 ---
 
@@ -241,4 +287,4 @@ Distribué sous la licence MIT. Voir `LICENSE` pour plus d'informations.
 
 ---
 
-**Dernière mise à jour** : 30 Novembre 2025
+**Dernière mise à jour** : 01 Décembre 2025 - Ajout du 5ème onglet Surface IV 3D Plotly
