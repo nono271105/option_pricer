@@ -225,18 +225,7 @@ L'interface PyQt5 s'ouvrira avec 4 onglets principaux.
 - **Gradient Plasma** : Colormap rouge→bleu pour meilleure distinction des niveaux IV
 - **Surface lissée** : Interpolation Cubic Griddata pour une surface continue
 
-**Calcul** :
-- Récupère les chaînes d'options pour **les dates d'expiration**
-- Extrait les **IV de tous les strikes** disponibles
-- Interpole avec la méthode **Cubic Griddata** pour une surface lisse et continue
-- Affiche à la fois les points bruts ET la surface interpolée
-- Convertit l'IV en pourcentage pour une meilleure lisibilité
-
-**Technologie** :
-- Visualisation avec **Plotly** pour l'interactivité 3D
-- Intégration **QWebEngineView** pour affichage natif dans PyQt5
-- Calcul non-bloquant avec **QThread** et signaux Qt
-- Caching TTL-based (3600s) pour éviter les requêtes API répétées
+<img width="1440" height="900" alt="Surface IV 3D" src="https://github.com/user-attachments/assets/33d47407-3f72-4963-8cb5-065126b277c0" />
 
 ---
 
